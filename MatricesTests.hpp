@@ -18,6 +18,7 @@ bool PerformTest(unsigned long long OperationCount, unsigned RunsToDo, long Seed
 	unsigned SuccessfulRuns = 0;
 	long long ShortestRun, LongestRun, LastRun;
 	Timer T1("Every Run Counter", false), T2("Only Succesful Runs Counter");
+
 	if (!Seed) {
 		srand(time(nullptr));
 	}
@@ -29,8 +30,8 @@ bool PerformTest(unsigned long long OperationCount, unsigned RunsToDo, long Seed
 		unsigned long long dim1 = GenerateNumber(4, std::cbrt(OperationCount));
 		unsigned long long dim2 = GenerateNumber(2, std::sqrt(OperationCount / dim1));
 		unsigned long long dim3 = OperationCount / (dim1 * dim2);
-		NumType Val1 = (NumType)GenerateNumber(1, 25);
-		NumType Val2 = (NumType)GenerateNumber(1, 5);
+		auto Val1 = (NumType)GenerateNumber(1, 25);
+		auto Val2 = (NumType)GenerateNumber(1, 5);
 
 		Matrix1<NumType> M1(dim1, dim2, Val1);
 		Matrix1<NumType> M2(dim2, dim3, Val2);
@@ -50,9 +51,9 @@ bool PerformTest(unsigned long long OperationCount, unsigned RunsToDo, long Seed
 			else if (LastRun < ShortestRun) ShortestRun = LastRun;
 		}
 
-		bool SuccesFlag = M3.CheckForIntegrity((NumType)(dim2 * Val1 * Val2), Verbose);
+		bool SuccessFlag = M3.CheckForIntegrity((NumType)(dim2 * Val1 * Val2), Verbose);
 
-		if (!SuccesFlag) {
+		if (!SuccessFlag) {
 			T2.InvalidateLastRun();
 		}
 		else ++SuccessfulRuns;
@@ -62,8 +63,8 @@ bool PerformTest(unsigned long long OperationCount, unsigned RunsToDo, long Seed
 		}
 	}
 
-	std::cout << "With longest time: " << LongestRun * 1e-9 << "(seconds)\nAnd shortest time: "
-		<< ShortestRun * 1e-9 << "(seconds)\nWith seed: " << Seed << std::endl;
+	std::cout << "With longest time: " << (double)LongestRun * 1e-9 << "(seconds)\nAnd shortest time: "
+		<< (double)ShortestRun * 1e-9 << "(seconds)\nWith seed: " << Seed << std::endl;
 
 	return SuccessfulRuns == RunsToDo;
 }
@@ -77,7 +78,7 @@ void PerformMajorTests(unsigned RunsToDo) {
 		}
 	}
 
-	std::cout << '\n\n' << CorrectRuns << " of " << RunsToDo << " were succesful in major test\n";
+	std::cout << "\n\n" << CorrectRuns << " of " << RunsToDo << " were successful in major test\n";
 }
 
 #endif

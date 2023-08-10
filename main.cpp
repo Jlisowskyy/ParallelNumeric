@@ -8,11 +8,11 @@
 #include "Debuggers.hpp"
 #include "MatricesTests.hpp"
 
-//#define __DebugSumProd
-#define __DebugMatrix1
-//#define __DebugVectors1
+//#define DebugSumProd
+#define DebugMatrix1
+//#define _ebugVectors1
 
-#ifdef __DebugSumProd
+#ifdef DebugSumProd
 
 double MyFunc(double x) {
     return exp(-x) * sqrt(x) + 1;
@@ -31,7 +31,7 @@ int main(){
     std::cout << std::fixed <<"Spent time: " << (time_stop.time_since_epoch() - time_start.time_since_epoch()).count()/(1000000 * 10)
         << "\n Result: " << result;
 }
-#elif defined __DebugVectors1
+#elif defined DebugVectors1
 
 
 using typior = double;
@@ -47,13 +47,13 @@ int main() {
     //std::cout << result;
 }
 
-#elif defined __DebugMatrix1
+#elif defined DebugMatrix1
 
 
 using typ = double;
-unsigned dim1 = 1000;
-unsigned dim2 = 1000;
-unsigned dim3 = 1000;
+unsigned dim1 = 6000;
+unsigned dim2 = 6000;
+unsigned dim3 = 6000;
 typ Val = 6;
 
 
@@ -67,7 +67,6 @@ int main() {
     T1.Stop();
 
     M3.CheckForIntegrity((typ)(Val * dim2), true);
-
     //PerformTest<double>(1000000000ull, 100, 7, true);
 
     ////PerformMajorTests(3);

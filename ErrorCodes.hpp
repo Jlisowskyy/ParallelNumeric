@@ -10,7 +10,7 @@
 
 void AbandonIfNull(void* ptr) {
 	if (ptr == nullptr) {
-#ifdef __DEBUG__
+#ifdef DEBUG_
 		std::cerr << "[ERROR] Returned pointer was null!";
 #endif
 		exit(0xfa);

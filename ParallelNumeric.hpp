@@ -12,30 +12,30 @@
 #define DOUBLE_VECTOR_LENGTH (unsigned long)4
 #define FLOAT_VECTOR_LENGTH (unsigned long)8
 #define PACKAGE_SIZE (unsigned long)256
-#define ALLIGN 64
+#define ALIGN 64
 #define CACHE_LINE 64
 
-#define __DEBUG__
+#define DEBUG_
 
 constexpr unsigned long GB = 1024 * 1024 * 1024;
 
 // Detecting system on compilation
 #ifdef __unix
-    #define __OpSysUNIX__
+    #define OpSysUNIX_
 #elif defined __unix__
-    #define __OpSysUNIX__
+    #define OpSysUNIX_
 #elif defined __linux__
-    #define __OpSysUNIX__
+    #define OpSysUNIX_
 #elif  defined _WIN32
-    #define __OpSysWIN__
+    #define OpSysWIN_
 #elif defined _WIN64
-    #define __OpSysWIN__
+    #define OpSysWIN_
 #else
-    #define __OpSysNONE__
+    #define OpSysNONE_
 #endif
 
 // Correct including behaviour
-#ifdef __OpSysUNIX__
+#ifdef OpSysUNIX_
 
 #include <sys/ioctl.h> 
     
@@ -46,7 +46,7 @@ int FindConsoleWidth() {
     return buff.ws_col;
 }
 
-#elif defined __OpSysWIN__
+#elif defined OpSysWIN_
 
 #include <windows.h>
 #include <sysinfoapi.h>

@@ -1,4 +1,4 @@
-// Autor: Jakub Lisowski
+// Author: Jakub Lisowski
 
 #include "RecursiveFunctions.hpp"
 #include "Matrix.hpp"

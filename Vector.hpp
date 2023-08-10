@@ -15,12 +15,12 @@
 
 template<typename T>
 class Vector 
-#ifdef __DEBUG__
+#ifdef DEBUG_
 	: public DebuggerFoundation<T>
 #endif
 {
 protected:
-	//T ThreadedResult[MaxCPUThreads] = { T() };
+	//NumType ThreadedResult[MaxCPUThreads] = { NumType() };
 	T* Array;
 	bool IsHorizontal;
 	const ResourceManager* MM;
@@ -30,10 +30,10 @@ protected:
 		// EXTREMELY SLOW
 	{
 		if (Val == 0) {
-#ifdef __OpSysWIN__
+#ifdef OpSysWIN_
 			ZeroMemory(Array, Size * sizeof(T));
 #else
-			memset(Array, 0, Size * sizeof(T));
+			memset(Array, 0, Size * sizeof(NumType));
 #endif
 		}
 		else {
@@ -41,7 +41,7 @@ protected:
 				Array[i] = Val;
 		}
 	}
-	void CheckForIncorecctSize() const {
+	void CheckForIncorrectSize() const {
 		if (Size == 0) {
 			exit(0xf1);
 		}
@@ -52,7 +52,7 @@ protected:
 			//TODO
 		}
 		else {
-			Array = (T*)_aligned_malloc(Size * sizeof(T), ALLIGN);
+			Array = (T*)_aligned_malloc(Size * sizeof(T), ALIGN);
 			AbandonIfNull(Array);
 		}
 	}
@@ -66,7 +66,7 @@ protected:
 		}
 	}
 
-#ifdef __DEBUG__
+#ifdef DEBUG_
 	virtual bool CheckForIntegrity(T Val) {
 		for (unsigned long i = 0; i < Size; ++i)
 			if (Array[i] != Val) return false;
@@ -104,14 +104,14 @@ public:
 	Vector(unsigned long Size, bool IsHorizontal = true, ResourceManager* MM = nullptr) noexcept:
 		Size{ Size }, IsHorizontal{ IsHorizontal }, MM{ MM }
 	{
-		CheckForIncorecctSize();
+        CheckForIncorrectSize();
 		AllocateArray();
 	}
 
 	Vector(unsigned long Size, T InitVal, bool IsHorizontal = true, ResourceManager* MM = nullptr) noexcept:
 		Size{ Size }, IsHorizontal{ IsHorizontal }, MM{ MM }
 	{
-		CheckForIncorecctSize();
+        CheckForIncorrectSize();
 		AllocateArray();
 		SetWholeData(InitVal);
 	}
@@ -119,7 +119,7 @@ public:
 	Vector(std::initializer_list<T> Init, bool IsHorizontal = true, ResourceManager* MM = nullptr) noexcept:
 		Size{ Init.size() }, IsHorizontal{ IsHorizontal }, MM{ MM }
 	{
-		CheckForIncorecctSize();
+        CheckForIncorrectSize();
 		AllocateArray();
 		MoveToArray(Init);
 	}
@@ -140,7 +140,7 @@ public:
 	Vector(unsigned long Size, T* Init, bool IsHorizontal = true, ResourceManager* MM = nullptr) noexcept:
 		Size{ Size }, IsHorizontal{ IsHorizontal }, MM{ MM }, Array{ Init }
 	{
-		CheckForIncorecctSize();
+        CheckForIncorrectSize();
 		
 		if (Init == nullptr)
 			exit(0xfb);
@@ -149,7 +149,7 @@ public:
 	Vector(unsigned long Size, const T* Init, bool IsHorizontal = true, ResourceManager* MM = nullptr) :
 		Size{ Size }, IsHorizontal{ IsHorizontal }, MM{ MM }
 	{
-		CheckForIncorecctSize();
+        CheckForIncorrectSize();
 		AllocateArray();
 
 		for (unsigned long i = 0; i < Size; ++i) {
@@ -157,7 +157,7 @@ public:
 		}
 	}
 
-	const Vector& operator=(const Vector& x) {
+	Vector& operator=(const Vector& x) {
 		if (this == &x) return *this;
 		DeallocateArray();
 
@@ -170,7 +170,7 @@ public:
 		return *this;
 	}
 
-	const Vector& operator=(Vector&& x) {
+	Vector& operator=(Vector&& x) noexcept{
 		DeallocateArray();
 
 		Size = x.Size;
@@ -181,9 +181,9 @@ public:
 		return *this;
 	}
 
-	inline unsigned long GetSize() const { return Size; }
-	inline bool GetHorizontalness() const { return IsHorizontal; }
-	inline T* const GetArray() const { return Array; }
+	[[nodiscard]] inline unsigned long GetSize() const { return Size; }
+	[[nodiscard]] inline bool GetHorizontalness() const { return IsHorizontal; }
+	inline T* GetArray() const { return Array; }
 	inline T* GetArray() { return Array; }
 	inline void ChangePosition() { IsHorizontal = !IsHorizontal; }
 
@@ -295,13 +295,13 @@ public:
 			Array[i] = 1 / std::tanh(Array[i]);
 	}
 
-	Vector GetModyfied(void (Vector::*func)(void)) const {
+	Vector GetModified(void (Vector::*func)()) const {
 		Vector RetVal = *this;
 		(RetVal.*func)();
 		return RetVal;
 	}
 
-	Vector GetModyfied(T(*func)(T x)) const {
+	Vector GetModified(T(*func)(T x)) const {
 		Vector RetVal = *this;
 
 		T* Dst = RetVal.Array;
@@ -312,7 +312,7 @@ public:
 		return RetVal;
 	}
 private:
-	template<class ThreadDecider = LogarythmicThreads, unsigned ThreadCap = 4>
+	template<class ThreadDecider = LogarithmicThreads, unsigned ThreadCap = 4>
 	friend T DotProduct(const Vector& a, const Vector& b) {
 		ThreadDecider Decider;
 		T RetVal;

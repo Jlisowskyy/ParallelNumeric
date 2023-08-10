@@ -1,8 +1,8 @@
 
 // Author: Jakub Lisowski
 
-#ifndef PARALLELNUM_DEBUGERS_H_
-#define PARALLELNUM_DEBUGERS_H_
+#ifndef PARALLELNUM_DEBUGGERS_H_
+#define PARALLELNUM_DEBUGGERS_H_
 
 #include <chrono>
 #include <iostream>
@@ -26,7 +26,7 @@ class Timer {
 		if (TimerName) std::cout << ", and name: " << TimerName;
 			
 		std::cout << ", spent time: \nIn seconds: " << SpentTime * 1e-9 <<
-			"\nIn miliseconds: " << SpentTime * 1e-6 << "\nIn microseconds: " <<
+			"\nIn milliseconds: " << SpentTime * 1e-6 << "\nIn microseconds: " <<
 			SpentTime * 1e-3 << "\nIn nanoseconds: " << SpentTime << std::endl;
 	}
 
@@ -82,7 +82,7 @@ public:
 
 	void CalculateAverageTime(unsigned AmountOfTries, bool Verbose = false) {
 		if (AmountOfTries == 0) {
-			std::cerr << "[ERROR] Timer enocuntered zero division in Average function\n";
+			std::cerr << "[ERROR] Timer encountered zero division in Average function\n";
 			return;
 		}
 

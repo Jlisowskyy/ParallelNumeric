@@ -47,9 +47,9 @@ Region* ResourceManager::GetRegion(unsigned SizeMB)
         return nullptr;
     }
 
-    if (!(MemoryAssetsInd < MemoryAssetsSize)) SortMemoryAssets();
+    if (MemoryAssetsInd >= MemoryAssetsSize) SortMemoryAssets();
 
-    Region* RetPtr = new (std::nothrow) Region(SizeMB);
+    auto* RetPtr = new (std::nothrow) Region(SizeMB);
 
     if (RetPtr != nullptr) {
         UsedMemory += SizeMB;

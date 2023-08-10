@@ -80,7 +80,7 @@ struct ThreadPackage {
 };
 
 class ResourceManager
-    // Class used to gloabaly collect info about resource usage probably used in future
+    // Class used to globally collect info about resource usage probably used in future
 {
     static unsigned short ExistingInstances;
     static unsigned long AllUsedMemory;
@@ -89,10 +89,10 @@ class ResourceManager
 public:
 
     static ThreadPackage& GetThreads() {
-        for (int i = 0; i < ThreadsAssetsSetsAmount; ++i) {
-            if (!ThreadAssets[i].Occupied) {
-                ThreadAssets[i].Occupied = true;
-                return ThreadAssets[i];
+        for (auto & ThreadAsset : ThreadAssets) {
+            if (!ThreadAsset.Occupied) {
+                ThreadAsset.Occupied = true;
+                return ThreadAsset;
             }
         }
 #ifdef _MSC_VER 
