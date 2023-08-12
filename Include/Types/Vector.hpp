@@ -8,9 +8,9 @@
 #include <cmath>
 #include <iostream>
 
-#include "NumericalCore.hpp"
-#include "ErrorCodes.hpp"
-#include "Debuggers.hpp"
+#include "../Operations/NumericalCore.hpp"
+#include "../Maintenance/ErrorCodes.hpp"
+#include "../Maintenance/Debuggers.hpp"
 
 
 template<typename T>

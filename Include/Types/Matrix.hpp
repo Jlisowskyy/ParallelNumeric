@@ -14,7 +14,7 @@
 #include <exception>
 
 #include "Vector.hpp"
-#include "Debuggers.hpp"
+#include "../Maintenance/Debuggers.hpp"
 
 ResourceManager* DefaultMatrixMM = nullptr;
 

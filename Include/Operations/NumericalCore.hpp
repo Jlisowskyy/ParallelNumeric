@@ -12,7 +12,7 @@
 #include <algorithm>
 #include <mutex>
 
-#include "ResourceManager.hpp"
+#include "../Management/ResourceManager.hpp"
 //#include "MatrixMultiplicationSolutions.hpp"
 
 // ------------------------------------

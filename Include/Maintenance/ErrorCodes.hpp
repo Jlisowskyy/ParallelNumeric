@@ -6,7 +6,7 @@
 
 #include <cstdlib>
 #include <iostream>
-#include "ParallelNumeric.hpp"
+#include "../Wrappers/ParallelNumeric.hpp"
 
 void AbandonIfNull(void* ptr) {
 	if (ptr == nullptr) {

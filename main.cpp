@@ -4,9 +4,9 @@
 #include <cmath>
 #include <windows.h>
 
-#include "OptimalOperations.hpp"
-#include "Debuggers.hpp"
-#include "MatricesTests.hpp"
+#include "/Include/Wrappers/OptimalOperations.hpp"
+#include "/Include/Maintenance/Debuggers.hpp"
+#include "/Include/Maintenance/MatricesTests.hpp"
 
 //#define DebugSumProd
 #define DebugMatrix1
@@ -51,9 +51,9 @@ int main() {
 
 
 using typ = double;
-unsigned dim1 = 6000;
-unsigned dim2 = 6000;
-unsigned dim3 = 6000;
+unsigned dim1 = 1000;
+unsigned dim2 = 1000;
+unsigned dim3 = 1000;
 typ Val = 6;
 
 

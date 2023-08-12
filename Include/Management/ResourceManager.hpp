@@ -4,7 +4,7 @@
 #ifndef PARALLELNUM_RESOURCE_MANAGER_H
 #define PARALLELNUM_RESOURCE_MANAGER_H
 
-#include "ParallelNumeric.hpp"
+#include "..\Wrappers\ParallelNumeric.hpp"
 #include <malloc.h>
 #include <exception>
 

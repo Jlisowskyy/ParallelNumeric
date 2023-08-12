@@ -7,7 +7,7 @@
 #include <cstdlib>
 #include <cmath>
 
-#include "OptimalOperations.hpp"
+#include "../Wrappers/OptimalOperations.hpp"
 
 unsigned long long GenerateNumber(unsigned long long MinVal, unsigned long long MaxVal) {
 	return  (unsigned long long)((3 * (double)rand() / (double)RAND_MAX) * (double)(MaxVal - MinVal)) + MinVal;

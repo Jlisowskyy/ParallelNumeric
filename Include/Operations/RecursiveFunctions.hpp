@@ -9,7 +9,7 @@
 
 template<typename T, class Operation, T InitVal, class Y = LinearThreads>
 class SmartFuncParent
-	// Class template used to define mathematical sum or product
+	// Class template used to define a mathematical sum or product
 {
 	T(*Func)(T);
 	T DistanceHolder = T();
