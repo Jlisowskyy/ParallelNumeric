@@ -17,6 +17,9 @@
 
 #define DEBUG_
 
+const long long unsigned ThreadedStartingThreshold = 32768;
+const unsigned BasicThreadPool = 8;
+const unsigned MaxCPUThreads = 20;
 constexpr unsigned long GB = 1024 * 1024 * 1024;
 
 // Detecting system on compilation
@@ -59,7 +62,6 @@ int FindConsoleWidth() {
 
 
 // Temporary
-#define MaxCPUThreads (unsigned)18
 #define TotalHWMemory (unsigned long)32768
 #define MaxMemUsage (unsigned long)24576
 

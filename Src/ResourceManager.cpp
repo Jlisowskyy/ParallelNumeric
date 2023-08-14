@@ -1,9 +1,11 @@
 
 // Author: Jakub Lisowski
 
-#include "ResourceManager.hpp"
+#include "../Include/Management/ResourceManager.hpp"
 #include <malloc.h>
 #include <exception>
+
+ResourceManager* DefaultMM = nullptr;
 
 unsigned long ResourceManager::AllUsedMemory = 0;
 unsigned short ResourceManager::ExistingInstances = 0;

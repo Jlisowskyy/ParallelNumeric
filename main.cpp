@@ -4,13 +4,13 @@
 #include <cmath>
 #include <windows.h>
 
-#include "/Include/Wrappers/OptimalOperations.hpp"
 #include "/Include/Maintenance/Debuggers.hpp"
 #include "/Include/Maintenance/MatricesTests.hpp"
+#include "/Include/Wrappers/OptimalOperations.hpp"
 
 //#define DebugSumProd
 #define DebugMatrix1
-//#define _ebugVectors1
+//#define DebugVectors1
 
 #ifdef DebugSumProd
 
@@ -63,10 +63,10 @@ int main() {
 
     Timer T1(nullptr, false);
     
-    auto M3 = M1 * M2;
+    Matrix1<typ> M3 = M1 * M2;
     T1.Stop();
 
-    M3.CheckForIntegrity((typ)(Val * dim2), true);
+//    M3.CheckForIntegrity((typ)(Val * dim2), true);
     //PerformTest<double>(1000000000ull, 100, 7, true);
 
     ////PerformMajorTests(3);

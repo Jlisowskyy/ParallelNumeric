@@ -8,13 +8,6 @@
 #include <iostream>
 #include "../Wrappers/ParallelNumeric.hpp"
 
-void AbandonIfNull(void* ptr) {
-	if (ptr == nullptr) {
-#ifdef DEBUG_
-		std::cerr << "[ERROR] Returned pointer was null!";
-#endif
-		exit(0xfa);
-	}
-}
+void AbandonIfNull(void* ptr);
 
 #endif

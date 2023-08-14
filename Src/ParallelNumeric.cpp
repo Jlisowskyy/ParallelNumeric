@@ -1,5 +1,5 @@
 // Author: Jakub Lisowski
-#include "ParallelNumeric.hpp"
+#include "../Include/Wrappers/ParallelNumeric.hpp"
 
 #ifdef OpSysWIN_
  
