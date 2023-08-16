@@ -38,6 +38,7 @@ static struct MatrixMultThreadsDecider
 
 class MatrixMultInterface{
 public:
+
     virtual void ProcessBlock(unsigned, unsigned) = 0;
     virtual void ProcessFrame() = 0;
     virtual ~MatrixMultInterface() = default;
@@ -126,12 +127,12 @@ void MatrixSumHelperNotAlignedArrays_RC_DivByCols_Frame(NumType* Target, const N
 //void MatrixSumHelperNotAlignedArrays_CR(double* Target, double* Input1, double* Input2, unsigned StartCol, unsigned StopCol, unsigned Rows,
 //	unsigned TargetSizeOfLine, unsigned Input1SizeOfLine, unsigned Input2SizeOfLine) {
 //
-//	unsigned ElementsInCacheLine = CACHE_LINE / sizeof(double);
+//	unsigned BlockSize = CACHE_LINE / sizeof(double);
 //	unsigned VectorsInCacheLine = 2;
 //
-//	for (unsigned i = 0; i < Rows; i += ElementsInCacheLine) {
-//		for (unsigned j = StartCol; j < StopCol; j += ElementsInCacheLine) {
-//			for (unsigned k = 0; k < ElementsInCacheLine; ++k) {
+//	for (unsigned i = 0; i < Rows; i += BlockSize) {
+//		for (unsigned j = StartCol; j < StopCol; j += BlockSize) {
+//			for (unsigned k = 0; k < BlockSize; ++k) {
 //				__m256d* VectTarget = (__m256d*) (Target + (j + k) * TargetSizeOfLine + i);
 //				__m256d* VectInput1 = (__m256d*) (Input1 + (j + k) * Input1SizeOfLine + i);
 //
@@ -149,6 +150,9 @@ void MatrixSumHelperNotAlignedArrays_RC_DivByCols_Frame(NumType* Target, const N
 
 template<typename NumType>
 class CCTarHor_MultMachine: public MatrixMultInterface {
+public:
+    static constexpr unsigned BlockSize = MATRIX_MULT_BLOCK_COEF * (CACHE_LINE / sizeof(NumType));
+private:
 	const unsigned Src1Rows;
 	const unsigned Src1Cols;
 	const unsigned Src2Rows;
@@ -159,11 +163,9 @@ class CCTarHor_MultMachine: public MatrixMultInterface {
 	NumType* const Target;
 	NumType* const Src1;
 	NumType* const Src2;
-	static const unsigned ElementsInCacheLine = CACHE_LINE / sizeof(NumType);
-    unsigned VectorBlocks;
-    unsigned BlocksPerVector;
-    unsigned BlocksPerBaseVector;
-
+    unsigned VectorBlocksRange;
+    unsigned BlocksPerVectorRange;
+    unsigned BlocksPerBaseVectorRange;
     void (CCTarHor_MultMachine::*MainFunc)(unsigned, unsigned);
     void (CCTarHor_MultMachine::*FrameFunc)();
 
@@ -172,15 +174,17 @@ public:
                          unsigned TargetSizeOfLine, unsigned Src1SizeOfLine, unsigned Src2SizeOfLine,
                          NumType* Target, NumType* Src1, NumType* Src2);
 
+    inline void ProcessAllBlocks(){
+        (this->*MainFunc)(0, VectorBlocksRange);
+    }
+
     inline void ProcessBlock(unsigned StartingBlock, unsigned BorderBlock) final {
-        (this->*MainFunc)(StartingBlock * ElementsInCacheLine, BorderBlock * ElementsInCacheLine);
+        (this->*MainFunc)(StartingBlock * BlockSize, BorderBlock * BlockSize);
     }
 
     inline void ProcessFrame() final {
-        if (VectorBlocks != Src2Cols) (this->*FrameFunc)();
+        if (VectorBlocksRange != Src2Cols) (this->*FrameFunc)();
     }
-
-    inline unsigned GetBlockCount() { return VectorBlocks; }
 
 #define BBScaledVectorCoefPacked(offset) Src1[(j + jj) * Src1SizeOfLine + k + kk + offset] * VectorScalar
 	// Scaled vector coef, used to get multiple scaled coefs with single val at once(4)
@@ -348,7 +352,9 @@ unsigned LinearThreads(const unsigned long long int Elements) {
 }
 
 template<unsigned ThreadCap, unsigned (*Decider)(unsigned long long)>
-bool MatrixMultThreadsDecider::FindOptimalThreadNumber(std::pair<unsigned, unsigned>& RetVal, unsigned Blocks, unsigned long long OperationCount) {
+bool MatrixMultThreadsDecider::FindOptimalThreadNumber(std::pair<unsigned, unsigned>& RetVal, unsigned Blocks, unsigned long long OperationCount)
+    // TOTAL MESS
+{
     unsigned DesiredThreadAmount = Decider(OperationCount);
     unsigned BlocksPerThread = Blocks / DesiredThreadAmount;
 
@@ -652,12 +658,12 @@ CCTarHor_MultMachine<NumType>::CCTarHor_MultMachine(const unsigned int Src1Rows,
 // Decides which variant is most optimal for passed matrices
 // TODO: verify
 {
-    VectorBlocks = (Src2Cols / ElementsInCacheLine) * ElementsInCacheLine;
-    BlocksPerVector = (Src2Rows / ElementsInCacheLine) * ElementsInCacheLine;
-    BlocksPerBaseVector = (Src1Rows / ElementsInCacheLine) * ElementsInCacheLine;
+    VectorBlocksRange = (Src2Cols / BlockSize) * BlockSize;
+    BlocksPerVectorRange = (Src2Rows / BlockSize) * BlockSize;
+    BlocksPerBaseVectorRange = (Src1Rows / BlockSize) * BlockSize;
 
-    if (BlocksPerBaseVector == Src1Rows) {
-        if (BlocksPerVector == Src2Rows) {
+    if (BlocksPerBaseVectorRange == Src1Rows) {
+        if (BlocksPerVectorRange == Src2Rows) {
             MainFunc = &CCTarHor_MultMachine::EEBlocks;
             FrameFunc = &CCTarHor_MultMachine::EEFrame;
         }
@@ -667,7 +673,7 @@ CCTarHor_MultMachine<NumType>::CCTarHor_MultMachine(const unsigned int Src1Rows,
         }
     }
     else {
-        if (BlocksPerVector == Src2Rows) {
+        if (BlocksPerVectorRange == Src2Rows) {
             MainFunc = &CCTarHor_MultMachine::NEBlocks;
             FrameFunc = &CCTarHor_MultMachine::NEFrame;
         }
@@ -681,17 +687,17 @@ CCTarHor_MultMachine<NumType>::CCTarHor_MultMachine(const unsigned int Src1Rows,
 
 template<typename NumType> void
 CCTarHor_MultMachine<NumType>::EEBlocks(const unsigned int VectorStartingBlock, const unsigned int VectorBlocksBorder) {
-    for (unsigned i = VectorStartingBlock; i < VectorBlocksBorder; i += ElementsInCacheLine) {
-        for (unsigned j = 0; j < BlocksPerVector; j += ElementsInCacheLine) {
-            for (unsigned k = 0; k < BlocksPerBaseVector; k += ElementsInCacheLine) {
-                for (unsigned ii = 0; ii < ElementsInCacheLine; ++ii) {
-                    for (unsigned kk = 0; kk < ElementsInCacheLine; kk += 4) {
+    for (unsigned i = VectorStartingBlock; i < VectorBlocksBorder; i += BlockSize) {
+        for (unsigned j = 0; j < BlocksPerVectorRange; j += BlockSize) {
+            for (unsigned k = 0; k < BlocksPerBaseVectorRange; k += BlockSize) {
+                for (unsigned ii = 0; ii < BlockSize; ++ii) {
+                    for (unsigned kk = 0; kk < BlockSize; kk += 4) {
                         NumType acc0 = 0;
                         NumType acc1 = 0;
                         NumType acc2 = 0;
                         NumType acc3 = 0;
 
-                        for (unsigned jj = 0; jj < ElementsInCacheLine; ++jj) {
+                        for (unsigned jj = 0; jj < BlockSize; ++jj) {
                             NumType VectorScalar = Src2[(i + ii) * Src2SizeOfLine + j + jj];
 
                             acc0 += BBScaledVectorCoefPacked(0);
@@ -715,17 +721,17 @@ CCTarHor_MultMachine<NumType>::EEBlocks(const unsigned int VectorStartingBlock, 
 
 template<typename NumType> void
 CCTarHor_MultMachine<NumType>::ENBlocks(const unsigned int VectorStartingBlock, const unsigned int VectorBlocksBorder) {
-    for (unsigned i = VectorStartingBlock; i < VectorBlocksBorder; i += ElementsInCacheLine) {
-        for (unsigned j = 0; j < BlocksPerVector; j += ElementsInCacheLine) {
-            for (unsigned k = 0; k < BlocksPerBaseVector; k += ElementsInCacheLine) {
-                for (unsigned ii = 0; ii < ElementsInCacheLine; ++ii) {
-                    for (unsigned kk = 0; kk < ElementsInCacheLine; kk += 4) {
+    for (unsigned i = VectorStartingBlock; i < VectorBlocksBorder; i += BlockSize) {
+        for (unsigned j = 0; j < BlocksPerVectorRange; j += BlockSize) {
+            for (unsigned k = 0; k < BlocksPerBaseVectorRange; k += BlockSize) {
+                for (unsigned ii = 0; ii < BlockSize; ++ii) {
+                    for (unsigned kk = 0; kk < BlockSize; kk += 4) {
                         NumType acc0 = 0;
                         NumType acc1 = 0;
                         NumType acc2 = 0;
                         NumType acc3 = 0;
 
-                        for (unsigned jj = 0; jj < ElementsInCacheLine; ++jj) {
+                        for (unsigned jj = 0; jj < BlockSize; ++jj) {
                             NumType VectorScalar = Src2[(i + ii) * Src2SizeOfLine + j + jj];
 
                             acc0 += BBScaledVectorCoefPacked(0);
@@ -744,18 +750,18 @@ CCTarHor_MultMachine<NumType>::ENBlocks(const unsigned int VectorStartingBlock, 
             }
         }
 
-        for (unsigned k = 0; k < BlocksPerBaseVector; k += ElementsInCacheLine)
+        for (unsigned k = 0; k < BlocksPerBaseVectorRange; k += BlockSize)
             // Doing last run on the not Blocked Base Vectors
         {
-            for (unsigned ii = 0; ii < ElementsInCacheLine; ++ii) {
+            for (unsigned ii = 0; ii < BlockSize; ++ii) {
 
-                for (unsigned kk = 0; kk < ElementsInCacheLine; kk += 4) {
+                for (unsigned kk = 0; kk < BlockSize; kk += 4) {
                     NumType acc0 = 0;
                     NumType acc1 = 0;
                     NumType acc2 = 0;
                     NumType acc3 = 0;
 
-                    for (unsigned j = BlocksPerVector; j < Src1Cols; ++j) {
+                    for (unsigned j = BlocksPerVectorRange; j < Src1Cols; ++j) {
                         NumType VectorScalar = Src2[(i + ii) * Src2SizeOfLine + j];
 
                         acc0 += NBScaledVectorCoefPacked(0);
@@ -778,17 +784,17 @@ CCTarHor_MultMachine<NumType>::ENBlocks(const unsigned int VectorStartingBlock, 
 template<typename NumType>
 void
 CCTarHor_MultMachine<NumType>::NEBlocks(const unsigned int VectorStartingBlock, const unsigned int VectorBlocksBorder) {
-    for (unsigned i = VectorStartingBlock; i < VectorBlocksBorder; i += ElementsInCacheLine) {
-        for (unsigned j = 0; j < BlocksPerVector; j += ElementsInCacheLine) {
-            for (unsigned k = 0; k < BlocksPerBaseVector; k += ElementsInCacheLine) {
-                for (unsigned ii = 0; ii < ElementsInCacheLine; ++ii) {
-                    for (unsigned kk = 0; kk < ElementsInCacheLine; kk += 4) {
+    for (unsigned i = VectorStartingBlock; i < VectorBlocksBorder; i += BlockSize) {
+        for (unsigned j = 0; j < BlocksPerVectorRange; j += BlockSize) {
+            for (unsigned k = 0; k < BlocksPerBaseVectorRange; k += BlockSize) {
+                for (unsigned ii = 0; ii < BlockSize; ++ii) {
+                    for (unsigned kk = 0; kk < BlockSize; kk += 4) {
                         NumType acc0 = 0;
                         NumType acc1 = 0;
                         NumType acc2 = 0;
                         NumType acc3 = 0;
 
-                        for (unsigned jj = 0; jj < ElementsInCacheLine; ++jj) {
+                        for (unsigned jj = 0; jj < BlockSize; ++jj) {
                             NumType Val = Src2[(i + ii) * Src2SizeOfLine + j + jj];
 
                             acc0 += Src1[(j + jj) * Src1SizeOfLine + k + kk] * Val;
@@ -808,14 +814,14 @@ CCTarHor_MultMachine<NumType>::NEBlocks(const unsigned int VectorStartingBlock, 
             }
 
             // Not guaranteed to be divisible by four - switching to alternative algorithm
-            for (unsigned ii = 0; ii < ElementsInCacheLine; ii += 4) {
-                for (unsigned k = BlocksPerBaseVector; k < Src1Rows; ++k) {
+            for (unsigned ii = 0; ii < BlockSize; ii += 4) {
+                for (unsigned k = BlocksPerBaseVectorRange; k < Src1Rows; ++k) {
                     NumType acc0 = 0;
                     NumType acc1 = 0;
                     NumType acc2 = 0;
                     NumType acc3 = 0;
 
-                    for (unsigned jj = 0; jj < ElementsInCacheLine; ++jj) {
+                    for (unsigned jj = 0; jj < BlockSize; ++jj) {
                         acc0 += Src1[(j + jj) * Src1SizeOfLine + k] * Src2[(i + ii) * Src2SizeOfLine + j + jj];
                         acc1 += Src1[(j + jj) * Src1SizeOfLine + k] * Src2[(i + ii + 1) * Src2SizeOfLine + j + jj];
                         acc2 += Src1[(j + jj) * Src1SizeOfLine + k] * Src2[(i + ii + 2) * Src2SizeOfLine + j + jj];
@@ -836,17 +842,17 @@ CCTarHor_MultMachine<NumType>::NEBlocks(const unsigned int VectorStartingBlock, 
 
 template<typename NumType> void
 CCTarHor_MultMachine<NumType>::NNBlocks(const unsigned int VectorStartingBlock, const unsigned int VectorBlocksBorder) {
-    for (unsigned i = VectorStartingBlock; i < VectorBlocksBorder; i += ElementsInCacheLine) {
-        for (unsigned j = 0; j < BlocksPerVector; j += ElementsInCacheLine) {
-            for (unsigned k = 0; k < BlocksPerBaseVector; k += ElementsInCacheLine) {
-                for (unsigned ii = 0; ii < ElementsInCacheLine; ++ii) {
-                    for (unsigned kk = 0; kk < ElementsInCacheLine; kk += 4) {
+    for (unsigned i = VectorStartingBlock; i < VectorBlocksBorder; i += BlockSize) {
+        for (unsigned j = 0; j < BlocksPerVectorRange; j += BlockSize) {
+            for (unsigned k = 0; k < BlocksPerBaseVectorRange; k += BlockSize) {
+                for (unsigned ii = 0; ii < BlockSize; ++ii) {
+                    for (unsigned kk = 0; kk < BlockSize; kk += 4) {
                         NumType acc0 = 0;
                         NumType acc1 = 0;
                         NumType acc2 = 0;
                         NumType acc3 = 0;
 
-                        for (unsigned jj = 0; jj < ElementsInCacheLine; ++jj) {
+                        for (unsigned jj = 0; jj < BlockSize; ++jj) {
                             NumType Val = Src2[(i + ii) * Src2SizeOfLine + j + jj];
 
                             acc0 += Src1[(j + jj) * Src1SizeOfLine + k + kk] * Val;
@@ -866,14 +872,14 @@ CCTarHor_MultMachine<NumType>::NNBlocks(const unsigned int VectorStartingBlock, 
             }
 
             // Not guaranteed to be divisible by four - switching to alternative algorithm
-            for (unsigned ii = 0; ii < ElementsInCacheLine; ii += 4) {
-                for (unsigned k = BlocksPerBaseVector; k < Src1Rows; ++k) {
+            for (unsigned ii = 0; ii < BlockSize; ii += 4) {
+                for (unsigned k = BlocksPerBaseVectorRange; k < Src1Rows; ++k) {
                     NumType acc0 = 0;
                     NumType acc1 = 0;
                     NumType acc2 = 0;
                     NumType acc3 = 0;
 
-                    for (unsigned jj = 0; jj < ElementsInCacheLine; ++jj) {
+                    for (unsigned jj = 0; jj < BlockSize; ++jj) {
                         NumType Val = Src1[(j + jj) * Src1SizeOfLine + k];
 
                         acc0 += Val * Src2[(i + ii) * Src2SizeOfLine + j + jj];
@@ -892,18 +898,18 @@ CCTarHor_MultMachine<NumType>::NNBlocks(const unsigned int VectorStartingBlock, 
             }
         }
 
-        for (unsigned k = 0; k < BlocksPerBaseVector; k += ElementsInCacheLine)
+        for (unsigned k = 0; k < BlocksPerBaseVectorRange; k += BlockSize)
             // Doing last run on the not Blocked Base Vectors
         {
-            for (unsigned ii = 0; ii < ElementsInCacheLine; ++ii) {
+            for (unsigned ii = 0; ii < BlockSize; ++ii) {
 
-                for (unsigned kk = 0; kk < ElementsInCacheLine; kk += 4) {
+                for (unsigned kk = 0; kk < BlockSize; kk += 4) {
                     NumType acc0 = 0;
                     NumType acc1 = 0;
                     NumType acc2 = 0;
                     NumType acc3 = 0;
 
-                    for (unsigned j = BlocksPerVector; j < Src1Cols; ++j) {
+                    for (unsigned j = BlocksPerVectorRange; j < Src1Cols; ++j) {
                         NumType Val = Src2[(i + ii) * Src2SizeOfLine + j];
 
                         acc0 += Src1[j * Src1SizeOfLine + k + kk] * Val;
@@ -922,10 +928,10 @@ CCTarHor_MultMachine<NumType>::NNBlocks(const unsigned int VectorStartingBlock, 
         }
 
 
-        for (unsigned ii = 0; ii < ElementsInCacheLine; ++ii) {
-            for (unsigned k = BlocksPerBaseVector; k < Src1Rows; ++k) {
+        for (unsigned ii = 0; ii < BlockSize; ++ii) {
+            for (unsigned k = BlocksPerBaseVectorRange; k < Src1Rows; ++k) {
                 NumType acc0 = 0;
-                for (unsigned j = BlocksPerVector; j < Src2Rows; ++j) {
+                for (unsigned j = BlocksPerVectorRange; j < Src2Rows; ++j) {
                     acc0 += Src1[j * Src1SizeOfLine + k] * Src2[(i + ii) * Src2SizeOfLine + j];
                 }
                 Target[(i + ii) * TargetSizeOfLine + k] += acc0;
@@ -936,16 +942,16 @@ CCTarHor_MultMachine<NumType>::NNBlocks(const unsigned int VectorStartingBlock, 
 
 template<typename NumType>
 void CCTarHor_MultMachine<NumType>::EEFrame() {
-    for (unsigned j = 0; j < BlocksPerVector; j += ElementsInCacheLine) {
-        for (unsigned k = 0; k < BlocksPerBaseVector; k += ElementsInCacheLine) {
-            for (unsigned i = VectorBlocks; i < Src2Cols; ++i) {
-                for (unsigned kk = 0; kk < ElementsInCacheLine; kk += 4) {
+    for (unsigned j = 0; j < BlocksPerVectorRange; j += BlockSize) {
+        for (unsigned k = 0; k < BlocksPerBaseVectorRange; k += BlockSize) {
+            for (unsigned i = VectorBlocksRange; i < Src2Cols; ++i) {
+                for (unsigned kk = 0; kk < BlockSize; kk += 4) {
                     NumType acc0 = 0;
                     NumType acc1 = 0;
                     NumType acc2 = 0;
                     NumType acc3 = 0;
 
-                    for (unsigned jj = 0; jj < ElementsInCacheLine; ++jj) {
+                    for (unsigned jj = 0; jj < BlockSize; ++jj) {
                         NumType Val = Src2[i * Src2SizeOfLine + j + jj];
 
                         acc0 += Src1[(j + jj) * Src1SizeOfLine + k + kk] * Val;
@@ -968,16 +974,16 @@ void CCTarHor_MultMachine<NumType>::EEFrame() {
 
 template<typename NumType>
 void CCTarHor_MultMachine<NumType>::ENFrame() {
-    for (unsigned j = 0; j < BlocksPerVector; j += ElementsInCacheLine) {
-        for (unsigned k = 0; k < BlocksPerBaseVector; k += ElementsInCacheLine) {
-            for (unsigned i = VectorBlocks; i < Src2Cols; ++i) {
-                for (unsigned kk = 0; kk < ElementsInCacheLine; kk += 4) {
+    for (unsigned j = 0; j < BlocksPerVectorRange; j += BlockSize) {
+        for (unsigned k = 0; k < BlocksPerBaseVectorRange; k += BlockSize) {
+            for (unsigned i = VectorBlocksRange; i < Src2Cols; ++i) {
+                for (unsigned kk = 0; kk < BlockSize; kk += 4) {
                     NumType acc0 = 0;
                     NumType acc1 = 0;
                     NumType acc2 = 0;
                     NumType acc3 = 0;
 
-                    for (unsigned jj = 0; jj < ElementsInCacheLine; ++jj) {
+                    for (unsigned jj = 0; jj < BlockSize; ++jj) {
                         NumType Val = Src2[i * Src2SizeOfLine + j + jj];
 
                         acc0 += Src1[(j + jj) * Src1SizeOfLine + k + kk] * Val;
@@ -996,15 +1002,15 @@ void CCTarHor_MultMachine<NumType>::ENFrame() {
         }
     }
 
-    for (unsigned k = 0; k < BlocksPerBaseVector; k += ElementsInCacheLine) {
-        for (unsigned i = VectorBlocks; i < Src2Cols; ++i) {
-            for (unsigned kk = 0; kk < ElementsInCacheLine; kk += 4) {
+    for (unsigned k = 0; k < BlocksPerBaseVectorRange; k += BlockSize) {
+        for (unsigned i = VectorBlocksRange; i < Src2Cols; ++i) {
+            for (unsigned kk = 0; kk < BlockSize; kk += 4) {
                 NumType acc0 = 0;
                 NumType acc1 = 0;
                 NumType acc2 = 0;
                 NumType acc3 = 0;
 
-                for (unsigned j = BlocksPerVector; j < Src2Rows; ++j) {
+                for (unsigned j = BlocksPerVectorRange; j < Src2Rows; ++j) {
                     NumType Val = Src2[i * Src2SizeOfLine + j];
 
                     acc0 += Src1[j * Src1SizeOfLine + k + kk] * Val;
@@ -1026,16 +1032,16 @@ void CCTarHor_MultMachine<NumType>::ENFrame() {
 
 template<typename NumType>
 void CCTarHor_MultMachine<NumType>::NEFrame() {
-    for (unsigned j = 0; j < BlocksPerVector; j += ElementsInCacheLine) {
-        for (unsigned k = 0; k < BlocksPerBaseVector; k += ElementsInCacheLine) {
-            for (unsigned i = VectorBlocks; i < Src2Cols; ++i) {
-                for (unsigned kk = 0; kk < ElementsInCacheLine; kk += 4) {
+    for (unsigned j = 0; j < BlocksPerVectorRange; j += BlockSize) {
+        for (unsigned k = 0; k < BlocksPerBaseVectorRange; k += BlockSize) {
+            for (unsigned i = VectorBlocksRange; i < Src2Cols; ++i) {
+                for (unsigned kk = 0; kk < BlockSize; kk += 4) {
                     NumType acc0 = 0;
                     NumType acc1 = 0;
                     NumType acc2 = 0;
                     NumType acc3 = 0;
 
-                    for (unsigned jj = 0; jj < ElementsInCacheLine; ++jj) {
+                    for (unsigned jj = 0; jj < BlockSize; ++jj) {
                         NumType Val = Src2[i * Src2SizeOfLine + (j + jj)];
 
                         acc0 += Src1[(j + jj) * Src1SizeOfLine + k + kk] * Val;
@@ -1052,11 +1058,11 @@ void CCTarHor_MultMachine<NumType>::NEFrame() {
             }
         }
 
-        for (unsigned i = VectorBlocks; i < Src2Cols; ++i) {
-            for (unsigned k = BlocksPerBaseVector; k < Src1Rows; ++k) {
+        for (unsigned i = VectorBlocksRange; i < Src2Cols; ++i) {
+            for (unsigned k = BlocksPerBaseVectorRange; k < Src1Rows; ++k) {
                 NumType acc = 0;
 
-                for (unsigned jj = 0; jj < ElementsInCacheLine; ++jj) {
+                for (unsigned jj = 0; jj < BlockSize; ++jj) {
                     acc += Src1[(j + jj) * Src1SizeOfLine + k] * Src2[i * Src2SizeOfLine + j + jj];
                 }
 
@@ -1068,16 +1074,16 @@ void CCTarHor_MultMachine<NumType>::NEFrame() {
 
 template<typename NumType>
 void CCTarHor_MultMachine<NumType>::NNFrame() {
-    for (unsigned j = 0; j < BlocksPerVector; j += ElementsInCacheLine) {
-        for (unsigned k = 0; k < BlocksPerBaseVector; k += ElementsInCacheLine) {
-            for (unsigned i = VectorBlocks; i < Src2Cols; ++i) {
-                for (unsigned kk = 0; kk < ElementsInCacheLine; kk += 4) {
+    for (unsigned j = 0; j < BlocksPerVectorRange; j += BlockSize) {
+        for (unsigned k = 0; k < BlocksPerBaseVectorRange; k += BlockSize) {
+            for (unsigned i = VectorBlocksRange; i < Src2Cols; ++i) {
+                for (unsigned kk = 0; kk < BlockSize; kk += 4) {
                     NumType acc0 = 0;
                     NumType acc1 = 0;
                     NumType acc2 = 0;
                     NumType acc3 = 0;
 
-                    for (unsigned jj = 0; jj < ElementsInCacheLine; ++jj) {
+                    for (unsigned jj = 0; jj < BlockSize; ++jj) {
                         NumType Val = Src2[i * Src2SizeOfLine + j + jj];
 
                         acc0 += Src1[(j + jj) * Src1SizeOfLine + k + kk] * Val;
@@ -1094,11 +1100,11 @@ void CCTarHor_MultMachine<NumType>::NNFrame() {
             }
         }
 
-        for (unsigned i = VectorBlocks; i < Src2Cols; ++i) {
-            for (unsigned k = BlocksPerBaseVector; k < Src1Rows; ++k) {
+        for (unsigned i = VectorBlocksRange; i < Src2Cols; ++i) {
+            for (unsigned k = BlocksPerBaseVectorRange; k < Src1Rows; ++k) {
                 NumType acc = 0;
 
-                for (unsigned jj = 0; jj < ElementsInCacheLine; ++jj) {
+                for (unsigned jj = 0; jj < BlockSize; ++jj) {
                     acc += Src1[(j + jj) * Src1SizeOfLine + k] * Src2[i * Src2SizeOfLine + j + jj];
                 }
                 Target[i * TargetSizeOfLine + k] += acc;
@@ -1106,15 +1112,15 @@ void CCTarHor_MultMachine<NumType>::NNFrame() {
         }
     }
 
-    for (unsigned k = 0; k < BlocksPerBaseVector; k += ElementsInCacheLine) {
-        for (unsigned i = VectorBlocks; i < Src2Cols; ++i) {
-            for (unsigned kk = 0; kk < ElementsInCacheLine; kk += 4) {
+    for (unsigned k = 0; k < BlocksPerBaseVectorRange; k += BlockSize) {
+        for (unsigned i = VectorBlocksRange; i < Src2Cols; ++i) {
+            for (unsigned kk = 0; kk < BlockSize; kk += 4) {
                 NumType acc0 = 0;
                 NumType acc1 = 0;
                 NumType acc2 = 0;
                 NumType acc3 = 0;
 
-                for (unsigned j = BlocksPerVector; j < Src2Rows; ++j) {
+                for (unsigned j = BlocksPerVectorRange; j < Src2Rows; ++j) {
                     NumType Val = Src2[i * Src2SizeOfLine + j];
 
                     acc0 += Src1[j * Src1SizeOfLine + k + kk] * Val;
@@ -1131,11 +1137,11 @@ void CCTarHor_MultMachine<NumType>::NNFrame() {
         }
     }
 
-    for (unsigned i = VectorBlocks; i < Src2Cols; ++i) {
-        for (unsigned k = BlocksPerBaseVector; k < Src1Rows; ++k) {
+    for (unsigned i = VectorBlocksRange; i < Src2Cols; ++i) {
+        for (unsigned k = BlocksPerBaseVectorRange; k < Src1Rows; ++k) {
             NumType acc = 0;
 
-            for (unsigned j = BlocksPerVector; j < Src2Rows; ++j) {
+            for (unsigned j = BlocksPerVectorRange; j < Src2Rows; ++j) {
                 acc += Src1[j * Src1SizeOfLine + k] * Src2[i * Src2SizeOfLine + j];
             }
             Target[i * TargetSizeOfLine + k] += acc;

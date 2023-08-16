@@ -27,73 +27,25 @@ class Vector
 #endif
 {
 protected:
-	//NumType ThreadedResult[MaxCPUThreads] = { NumType() };
-	NumType* Array;
+    unsigned long Size;
 	bool IsHorizontal;
 	const ResourceManager* MM;
-	unsigned long Size;
+    NumType* Array;
 
-	inline void SetWholeData(NumType Val)
-		// EXTREMELY SLOW
-	{
-		if (Val == 0) {
-#ifdef OpSysWIN_
-			ZeroMemory(Array, Size * sizeof(NumType));
-#else
-			memset(Array, 0, Size * sizeof(NumType));
-#endif
-		}
-		else {
-			for (unsigned long i = 0; i < Size; ++i)
-				Array[i] = Val;
-		}
-	}
-
-	void CheckForIncorrectSize() const {
-		if (Size == 0) {
-			exit(0xf1);
-		}
-	}
-
-	void AllocateArray() {
-		if (MM) {
-			//TODO
-		}
-		else {
-			Array = (NumType*)_aligned_malloc(Size * sizeof(NumType), ALIGN);
-			AbandonIfNull(Array);
-		}
-	}
-
-	void DeallocateArray() {
-		if (MM) {
-			//TODO
-		}
-		else {
-			_aligned_free(Array);
-		}
-	}
+	inline void SetWholeData(NumType Val);
+    void CheckForIncorrectSize() const { if (Size == 0) exit(0xf1); }
+	void AllocateArray();
+	void DeallocateArray();
 
 #ifdef DEBUG_
-	virtual bool CheckForIntegrity(NumType Val) {
-		for (unsigned long i = 0; i < Size; ++i)
-			if (Array[i] != Val) return false;
-
-		return true;
-	}
-
-	virtual bool CheckForIntegrity(NumType* Val) {
-		for (unsigned long i = 0; i < Size; ++i)
-			if (Array[i] != Val[i]) return false;
-
-		return true;
-	}
+	virtual bool CheckForIntegrity(NumType Val, bool verbose);
+	virtual bool CheckForIntegrity(NumType* Val, bool verbose);
 #endif
 
 	// Used only for init_list<init_list> - unknown parameters
 	// Should not be used as a class constructor, may lead to unexpected problems
 	Vector(bool IsHorizontal, ResourceManager* MM) noexcept :
-		IsHorizontal{ IsHorizontal }, MM{ MM }, Size{ 0 }, Array{ nullptr } {}
+        Size{ 0 }, IsHorizontal{ IsHorizontal }, MM{ MM }, Array{ nullptr } {}
 
 public:
 	void MoveToArray(std::initializer_list<NumType> Init);
@@ -295,6 +247,72 @@ public:
     }
 
 };
+
+#ifdef DEBUG_
+
+template<typename NumType>
+bool Vector<NumType>::CheckForIntegrity(NumType *Val, bool verbose) {
+    for (unsigned long i = 0; i < Size; ++i)
+        if (Array[i] != Val[i]){
+            if (verbose) std::cerr << "[ERROR] Integrity test failed on Index: " << i << '\n';
+            return false;
+        }
+
+    if (verbose) std::cout << "Success\n";
+    return true;
+}
+
+template<typename NumType>
+bool Vector<NumType>::CheckForIntegrity(NumType Val, bool verbose) {
+    for (unsigned long i = 0; i < Size; ++i)
+        if (Array[i] != Val) {
+            if (verbose) std::cerr << "[ERROR] Integrity test failed on Index: " << i << '\n';
+            return false;
+        }
+
+    if (verbose) std::cout << "Success\n";
+    return true;
+}
+
+#endif // DEBUG_
+
+template<typename NumType>
+void Vector<NumType>::SetWholeData(NumType Val)
+// EXTREMELY SLOW
+{
+    if (Val == 0) {
+#ifdef OpSysWIN_
+        ZeroMemory(Array, Size * sizeof(NumType));
+#else
+        memset(Array, 0, Size * sizeof(NumType));
+#endif
+    }
+    else {
+        for (unsigned long i = 0; i < Size; ++i)
+            Array[i] = Val;
+    }
+}
+
+template<typename NumType>
+void Vector<NumType>::DeallocateArray() {
+    if (MM) {
+        //TODO
+    }
+    else {
+        _aligned_free(Array);
+    }
+}
+
+template<typename NumType>
+void Vector<NumType>::AllocateArray() {
+    if (MM) {
+        //TODO
+    }
+    else {
+        Array = (NumType*)_aligned_malloc(Size * sizeof(NumType), ALIGN);
+        AbandonIfNull(Array);
+    }
+}
 
 template<typename NumType>
 void Vector<NumType>::MoveToArray(std::initializer_list<NumType> Init) {

@@ -51,9 +51,9 @@ int main() {
 
 
 using typ = double;
-unsigned dim1 = 1000;
-unsigned dim2 = 1000;
-unsigned dim3 = 1000;
+unsigned dim1 = 1024;
+unsigned dim2 = 1024;
+unsigned dim3 = 1024;
 typ Val = 6;
 
 
@@ -61,8 +61,7 @@ int main() {
     Matrix1<typ> M1(dim1, dim2, (typ)1);
     Matrix1<typ> M2(dim2, dim3, Val);
 
-    Timer T1(nullptr, false);
-    
+    Timer T1("GENERAL CLOCK", false);
     Matrix1<typ> M3 = M1 * M2;
     T1.Stop();
 

@@ -45,7 +45,7 @@ void ResourceManager::SortMemoryAssets() {
 Region* ResourceManager::GetRegion(unsigned SizeMB)
 // Possibly to return nullptr when new not succeed
 {
-    if (SizeMB + AllUsedMemory > MaxMemUsage || UsedRegions >= MemoryAssetsSize) {
+    if (SizeMB + AllUsedMemory > MAX_MEM_USAGE || UsedRegions >= MemoryAssetsSize) {
         return nullptr;
     }
 

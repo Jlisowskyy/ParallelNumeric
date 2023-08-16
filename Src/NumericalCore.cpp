@@ -3,6 +3,7 @@
 //
 
 #include "../Include/Operations/NumericalCore.hpp"
+#include "../Include/Maintenance/Debuggers.hpp"
 
 void MatrixMultThreadExecutionUnit::StartExecution() {
     ThreadPackage& Threads = ResourceManager::GetThreads();
@@ -24,9 +25,13 @@ void MatrixMultThreadExecutionUnit::StartExecution() {
     Threads.Release();
 }
 
+#include <string>
+
 void MatrixMultThreadExecutionUnit::MatrixMultThread(unsigned int StartBlock, unsigned int BorderBlock) {
     Synchronizer.arrive_and_wait();
 
+    std::string name = std::to_string(StartBlock) + ' ' + std::to_string(BorderBlock);
+    Timer T1(name.c_str() , false);
     (Machine->ProcessBlock)(StartBlock, BorderBlock);
 
     if (m.try_lock()){ // bullshiet
@@ -35,7 +40,12 @@ void MatrixMultThreadExecutionUnit::MatrixMultThread(unsigned int StartBlock, un
             FrameDone = true;
         }
 
+        m.unlock();
     }
+
+    m.lock();
+    T1.Stop();
+    m.unlock();
 }
 
 // -----------------------------------------
@@ -91,44 +101,33 @@ void MatrixSumHelperAlignedArrays(float *Target, const float *const Input1, cons
 
 #if defined(__AVX__) && defined(__FMA__)
 
+#define VECTORCOEF0 Src2[(i + ii) * Src2SizeOfLine + j + jj]
+#define VECTORCOEF1 Src2[(i + ii + 1) * Src2SizeOfLine + j + jj]
+#define AVXLINE *((__m256d*)(Src1 + (j + jj) * Src1SizeOfLine + k + kk))
+#define TAR0 *((__m256d*)(Target + (i + ii) * TargetSizeOfLine + k + kk))
+#define TAR1 *((__m256d*)(Target + (i + ii + 1) * TargetSizeOfLine + k + kk))
+
 template<>
 void CCTarHor_MultMachine<double>::EEBlocks(const unsigned VectorStartingBlock, const unsigned VectorBlocksBorder)
 {
-    unsigned Mult = 1;
-    for (unsigned i = VectorStartingBlock / Mult; i < VectorBlocksBorder / Mult; i += ElementsInCacheLine * Mult) {
-        for (unsigned j = 0; j < BlocksPerVector / Mult; j += ElementsInCacheLine * Mult)
+    for (unsigned i = VectorStartingBlock; i < VectorBlocksBorder; i += BlockSize) {
+        for (unsigned j = 0; j < BlocksPerVectorRange; j += BlockSize)
             // Next iterations without cleaning
         {
-            for (unsigned k = 0; k < BlocksPerBaseVector / Mult; k += ElementsInCacheLine * Mult) {
-                for (unsigned ii = 0; ii < ElementsInCacheLine * Mult; ii += 2) {
+            for (unsigned k = 0; k < BlocksPerBaseVectorRange; k += BlockSize) {
+                for (unsigned ii = 0; ii < BlockSize; ii += 3) {
 
-                    for (unsigned kk = 0; kk < ElementsInCacheLine * Mult; kk += 4) {
+                    for (unsigned kk = 0; kk < BlockSize; kk += 4) {
                         __m256d acc0 = _mm256_setzero_pd();
                         __m256d acc1 = _mm256_setzero_pd();
 
-                        for (unsigned jj = 0; jj < ElementsInCacheLine * Mult; ++jj) {
-                            double VectorCoef0 = Src2[(i + ii) * Src2SizeOfLine + j + jj];
-                            double VectorCoef1 = Src2[(i + ii + 1) * Src2SizeOfLine + j + jj];
-                            __m256d BaseVectorAVXLine = *((__m256d*)(Src1 + (j + jj) * Src1SizeOfLine + k + kk));
-
-                            acc0 = _mm256_fmadd_pd(BaseVectorAVXLine,
-                                                   _mm256_set1_pd(VectorCoef0),
-                                                   acc0
-                            );
-
-                            acc1 = _mm256_fmadd_pd(BaseVectorAVXLine,
-                                                   _mm256_set1_pd(VectorCoef1),
-                                                   acc1
-                            );
+                        for (unsigned jj = 0; jj < BlockSize; ++jj) {
+                            acc0 = _mm256_fmadd_pd(AVXLINE,_mm256_set1_pd(VECTORCOEF0),acc0);
+                            acc1 = _mm256_fmadd_pd(AVXLINE,_mm256_set1_pd(VECTORCOEF1),acc1);
                         }
 
-                        *((__m256d*)(Target + (i + ii) * TargetSizeOfLine + k + kk)) = _mm256_add_pd(acc0,
-                                                                                                     *((__m256d*)(Target + (i + ii) * TargetSizeOfLine + k + kk))
-                        );
-
-                        *((__m256d*)(Target + (i + ii + 1) * TargetSizeOfLine + k + kk)) = _mm256_add_pd(acc1,
-                                                                                                         *((__m256d*)(Target + (i + ii + 1) * TargetSizeOfLine + k + kk))
-                        );
+                        TAR0 = _mm256_add_pd(acc0, TAR0);
+                        TAR1 = _mm256_add_pd(acc1, TAR1);
                     }
                 }
             }
@@ -139,131 +138,85 @@ void CCTarHor_MultMachine<double>::EEBlocks(const unsigned VectorStartingBlock, 
 template<>
 void CCTarHor_MultMachine<double>::ENBlocks(const unsigned VectorStartingBlock, const unsigned VectorBlocksBorder)
 {
-    for (unsigned i = VectorStartingBlock; i < VectorBlocksBorder; i += ElementsInCacheLine) {
-        for (unsigned j = 0; j < BlocksPerVector; j += ElementsInCacheLine)
+    for (unsigned i = VectorStartingBlock; i < VectorBlocksBorder; i += BlockSize) {
+        for (unsigned j = 0; j < BlocksPerVectorRange; j += BlockSize)
             // Next iterations without cleaning
         {
-            for (unsigned k = 0; k < BlocksPerBaseVector; k += ElementsInCacheLine) {
-                for (unsigned ii = 0; ii < ElementsInCacheLine; ii += 2) {
+            for (unsigned k = 0; k < BlocksPerBaseVectorRange; k += BlockSize) {
+                for (unsigned ii = 0; ii < BlockSize; ii += 3) {
 
-                    for (unsigned kk = 0; kk < ElementsInCacheLine; kk += 4) {
-                        __m256d acc0 = _mm256_set1_pd(0);
-                        __m256d acc1 = _mm256_set1_pd(0);
+                    for (unsigned kk = 0; kk < BlockSize; kk += 4) {
+                        __m256d acc0 = _mm256_setzero_pd();
+                        __m256d acc1 = _mm256_setzero_pd();
 
-                        for (unsigned jj = 0; jj < ElementsInCacheLine; ++jj) {
-                            double VectorCoef0 = Src2[(i + ii) * Src2SizeOfLine + j + jj];
-                            double VectorCoef1 = Src2[(i + ii + 1) * Src2SizeOfLine + j + jj];
-                            __m256d BaseVectorAVXLine = *((__m256d*)(Src1 + (j + jj) * Src1SizeOfLine + k + kk));
-
-                            acc0 = _mm256_fmadd_pd(BaseVectorAVXLine,
-                                                   _mm256_set1_pd(VectorCoef0),
-                                                   acc0
-                            );
-
-                            acc1 = _mm256_fmadd_pd(BaseVectorAVXLine,
-                                                   _mm256_set1_pd(VectorCoef1),
-                                                   acc1
-                            );
+                        for (unsigned jj = 0; jj < BlockSize; ++jj) {
+                            acc0 = _mm256_fmadd_pd(AVXLINE,_mm256_set1_pd(VECTORCOEF0),acc0);
+                            acc1 = _mm256_fmadd_pd(AVXLINE,_mm256_set1_pd(VECTORCOEF1),acc1);
                         }
 
-                        *((__m256d*)(Target + (i + ii) * TargetSizeOfLine + k + kk)) = _mm256_add_pd(acc0,
-                                                                                                     *((__m256d*)(Target + (i + ii) * TargetSizeOfLine + k + kk))
-                        );
-
-                        *((__m256d*)(Target + (i + ii + 1) * TargetSizeOfLine + k + kk)) = _mm256_add_pd(acc1,
-                                                                                                         *((__m256d*)(Target + (i + ii + 1) * TargetSizeOfLine + k + kk))
-                        );
+                        TAR0 = _mm256_add_pd(acc0, TAR0);
+                        TAR1 = _mm256_add_pd(acc1, TAR1);
                     }
                 }
             }
         }
+#define B_VECTORCOEF0 Src2[(i + ii) * Src2SizeOfLine + j ]
+#define B_VECTORCOEF1 Src2[(i + ii + 1) * Src2SizeOfLine + j]
+#define B_AVXLINE *((__m256d*)(Src1 + j * Src1SizeOfLine + k + kk))
 
-        for (unsigned k = 0; k < BlocksPerBaseVector; k += ElementsInCacheLine) {
-            for (unsigned ii = 0; ii < ElementsInCacheLine; ii += 2) {
+        for (unsigned k = 0; k < BlocksPerBaseVectorRange; k += BlockSize) {
+            for (unsigned ii = 0; ii < BlockSize; ii += 2) {
 
-                for (unsigned kk = 0; kk < ElementsInCacheLine; kk += 4) {
+                for (unsigned kk = 0; kk < BlockSize; kk += 4) {
                     __m256d acc0 = _mm256_setzero_pd();
                     __m256d acc1 = _mm256_setzero_pd();
 
-                    for (unsigned j = BlocksPerVector; j < Src1Cols; ++j) {
-                        double VectorCoef0 = Src2[(i + ii) * Src2SizeOfLine + j];
-                        double VectorCoef1 = Src2[(i + ii + 1) * Src2SizeOfLine + j];
-                        __m256d BaseVectorAVXLine = *((__m256d*)(Src1 + j * Src1SizeOfLine + k + kk));
-
-                        acc0 = _mm256_fmadd_pd(BaseVectorAVXLine,
-                                               _mm256_set1_pd(VectorCoef0),
-                                               acc0
-                        );
-
-                        acc1 = _mm256_fmadd_pd(BaseVectorAVXLine,
-                                               _mm256_set1_pd(VectorCoef1),
-                                               acc1
-                        );
+                    for (unsigned j = BlocksPerVectorRange; j < Src1Cols; ++j) {
+                        acc0 = _mm256_fmadd_pd(B_AVXLINE,_mm256_set1_pd(B_VECTORCOEF0),acc0);
+                        acc1 = _mm256_fmadd_pd(B_AVXLINE,_mm256_set1_pd(B_VECTORCOEF1),acc1);
                     }
 
-                    *((__m256d*)(Target + (i + ii) * TargetSizeOfLine + k + kk)) = _mm256_add_pd(acc0,
-                                                                                                 *((__m256d*)(Target + (i + ii) * TargetSizeOfLine + k + kk))
-                    );
-
-                    *((__m256d*)(Target + (i + ii + 1) * TargetSizeOfLine + k + kk)) = _mm256_add_pd(acc1,
-                                                                                                     *((__m256d*)(Target + (i + ii + 1) * TargetSizeOfLine + k + kk))
-                    );
+                    TAR0 = _mm256_add_pd(acc0, TAR0);
+                    TAR1 = _mm256_add_pd(acc1, TAR1);
                 }
             }
         }
     }
 }
 
-
 template<>
 void CCTarHor_MultMachine<double>::NEBlocks(const unsigned VectorStartingBlock, const unsigned VectorBlocksBorder)
 {
-    for (unsigned i = VectorStartingBlock; i < VectorBlocksBorder; i += ElementsInCacheLine) {
-        for (unsigned j = 0; j < BlocksPerVector; j += ElementsInCacheLine)
+    for (unsigned i = VectorStartingBlock; i < VectorBlocksBorder; i += BlockSize) {
+        for (unsigned j = 0; j < BlocksPerVectorRange; j += BlockSize)
             // Next iterations without cleaning
         {
-            for (unsigned k = 0; k < BlocksPerBaseVector; k += ElementsInCacheLine) {
-                for (unsigned ii = 0; ii < ElementsInCacheLine; ii += 2) {
+            for (unsigned k = 0; k < BlocksPerBaseVectorRange; k += BlockSize) {
+                for (unsigned ii = 0; ii < BlockSize; ii += 3) {
 
-                    for (unsigned kk = 0; kk < ElementsInCacheLine; kk += 4) {
+                    for (unsigned kk = 0; kk < BlockSize; kk += 4) {
                         __m256d acc0 = _mm256_setzero_pd();
                         __m256d acc1 = _mm256_setzero_pd();
 
-                        for (unsigned jj = 0; jj < ElementsInCacheLine; ++jj) {
-                            double VectorCoef0 = Src2[(i + ii) * Src2SizeOfLine + j + jj];
-                            double VectorCoef1 = Src2[(i + ii + 1) * Src2SizeOfLine + j + jj];
-                            __m256d BaseVectorAVXLine = *((__m256d*)(Src1 + (j + jj) * Src1SizeOfLine + k + kk));
-
-                            acc0 = _mm256_fmadd_pd(BaseVectorAVXLine,
-                                                   _mm256_set1_pd(VectorCoef0),
-                                                   acc0
-                            );
-
-                            acc1 = _mm256_fmadd_pd(BaseVectorAVXLine,
-                                                   _mm256_set1_pd(VectorCoef1),
-                                                   acc1
-                            );
+                        for (unsigned jj = 0; jj < BlockSize; ++jj) {
+                            acc0 = _mm256_fmadd_pd(AVXLINE,_mm256_set1_pd(VECTORCOEF0),acc0);
+                            acc1 = _mm256_fmadd_pd(AVXLINE,_mm256_set1_pd(VECTORCOEF1),acc1);
                         }
 
-                        *((__m256d*)(Target + (i + ii) * TargetSizeOfLine + k + kk)) = _mm256_add_pd(acc0,
-                                                                                                     *((__m256d*)(Target + (i + ii) * TargetSizeOfLine + k + kk))
-                        );
-
-                        *((__m256d*)(Target + (i + ii + 1) * TargetSizeOfLine + k + kk)) = _mm256_add_pd(acc1,
-                                                                                                         *((__m256d*)(Target + (i + ii + 1) * TargetSizeOfLine + k + kk))
-                        );
+                        TAR0 = _mm256_add_pd(acc0, TAR0);
+                        TAR1 = _mm256_add_pd(acc1, TAR1);
                     }
                 }
             }
 
-            for (unsigned ii = 0; ii < ElementsInCacheLine; ii += 4) {
-                for (unsigned k = BlocksPerBaseVector; k < Src1Rows; ++k) {
+            for (unsigned ii = 0; ii < BlockSize; ii += 4) {
+                for (unsigned k = BlocksPerBaseVectorRange; k < Src1Rows; ++k) {
                     double acc0 = 0;
                     double acc1 = 0;
                     double acc2 = 0;
                     double acc3 = 0;
 
-                    for (unsigned jj = 0; jj < ElementsInCacheLine; ++jj) {
+                    for (unsigned jj = 0; jj < BlockSize; ++jj) {
                         acc0 += Src1[(j + jj) * Src1SizeOfLine + k] * Src2[(i + ii) * Src2SizeOfLine + j + jj];
                         acc1 += Src1[(j + jj) * Src1SizeOfLine + k] * Src2[(i + ii + 1) * Src2SizeOfLine + j + jj];
                         acc2 += Src1[(j + jj) * Src1SizeOfLine + k] * Src2[(i + ii + 2) * Src2SizeOfLine + j + jj];
@@ -285,52 +238,36 @@ void CCTarHor_MultMachine<double>::NEBlocks(const unsigned VectorStartingBlock, 
 template<>
 void CCTarHor_MultMachine<double>::NNBlocks(const unsigned VectorStartingBlock, const unsigned VectorBlocksBorder)
 {
-    for (unsigned i = VectorStartingBlock; i < VectorBlocksBorder; i += ElementsInCacheLine) {
-        for (unsigned j = 0; j < BlocksPerVector; j += ElementsInCacheLine)
+    for (unsigned i = VectorStartingBlock; i < VectorBlocksBorder; i += BlockSize) {
+        for (unsigned j = 0; j < BlocksPerVectorRange; j += BlockSize)
             // Next iterations without cleaning
         {
-            for (unsigned k = 0; k < BlocksPerBaseVector; k += ElementsInCacheLine) {
-                for (unsigned ii = 0; ii < ElementsInCacheLine; ii += 2) {
+            for (unsigned k = 0; k < BlocksPerBaseVectorRange; k += BlockSize) {
+                for (unsigned ii = 0; ii < BlockSize; ii += 3) {
 
-                    for (unsigned kk = 0; kk < ElementsInCacheLine; kk += 4) {
+                    for (unsigned kk = 0; kk < BlockSize; kk += 4) {
                         __m256d acc0 = _mm256_setzero_pd();
                         __m256d acc1 = _mm256_setzero_pd();
 
-                        for (unsigned jj = 0; jj < ElementsInCacheLine; ++jj) {
-                            double VectorCoef0 = Src2[(i + ii) * Src2SizeOfLine + j + jj];
-                            double VectorCoef1 = Src2[(i + ii + 1) * Src2SizeOfLine + j + jj];
-                            __m256d BaseVectorAVXLine = *((__m256d*)(Src1 + (j + jj) * Src1SizeOfLine + k + kk));
-
-                            acc0 = _mm256_fmadd_pd(BaseVectorAVXLine,
-                                                   _mm256_set1_pd(VectorCoef0),
-                                                   acc0
-                            );
-
-                            acc1 = _mm256_fmadd_pd(BaseVectorAVXLine,
-                                                   _mm256_set1_pd(VectorCoef1),
-                                                   acc1
-                            );
+                        for (unsigned jj = 0; jj < BlockSize; ++jj) {
+                            acc0 = _mm256_fmadd_pd(AVXLINE,_mm256_set1_pd(VECTORCOEF0),acc0);
+                            acc1 = _mm256_fmadd_pd(AVXLINE,_mm256_set1_pd(VECTORCOEF1),acc1);
                         }
 
-                        *((__m256d*)(Target + (i + ii) * TargetSizeOfLine + k + kk)) = _mm256_add_pd(acc0,
-                                                                                                     *((__m256d*)(Target + (i + ii) * TargetSizeOfLine + k + kk))
-                        );
-
-                        *((__m256d*)(Target + (i + ii + 1) * TargetSizeOfLine + k + kk)) = _mm256_add_pd(acc1,
-                                                                                                         *((__m256d*)(Target + (i + ii + 1) * TargetSizeOfLine + k + kk))
-                        );
+                        TAR0 = _mm256_add_pd(acc0, TAR0);
+                        TAR1 = _mm256_add_pd(acc1, TAR1);
                     }
                 }
             }
 
-            for (unsigned ii = 0; ii < ElementsInCacheLine; ii += 4) {
-                for (unsigned k = BlocksPerBaseVector; k < Src1Rows; ++k) {
+            for (unsigned ii = 0; ii < BlockSize; ii += 4) {
+                for (unsigned k = BlocksPerBaseVectorRange; k < Src1Rows; ++k) {
                     double acc0 = 0;
                     double acc1 = 0;
                     double acc2 = 0;
                     double acc3 = 0;
 
-                    for (unsigned jj = 0; jj < ElementsInCacheLine; ++jj) {
+                    for (unsigned jj = 0; jj < BlockSize; ++jj) {
                         acc0 += Src1[(j + jj) * Src1SizeOfLine + k] * Src2[(i + ii) * Src2SizeOfLine + j + jj];
                         acc1 += Src1[(j + jj) * Src1SizeOfLine + k] * Src2[(i + ii + 1) * Src2SizeOfLine + j + jj];
                         acc2 += Src1[(j + jj) * Src1SizeOfLine + k] * Src2[(i + ii + 2) * Src2SizeOfLine + j + jj];
@@ -347,44 +284,28 @@ void CCTarHor_MultMachine<double>::NNBlocks(const unsigned VectorStartingBlock, 
             }
         }
 
-        for (unsigned k = 0; k < BlocksPerBaseVector; k += ElementsInCacheLine) {
-            for (unsigned ii = 0; ii < ElementsInCacheLine; ii += 2) {
+        for (unsigned k = 0; k < BlocksPerBaseVectorRange; k += BlockSize) {
+            for (unsigned ii = 0; ii < BlockSize; ii += 2) {
 
-                for (unsigned kk = 0; kk < ElementsInCacheLine; kk += 4) {
+                for (unsigned kk = 0; kk < BlockSize; kk += 4) {
                     __m256d acc0 = _mm256_setzero_pd();
                     __m256d acc1 = _mm256_setzero_pd();
 
-                    for (unsigned j = BlocksPerVector; j < Src1Cols; ++j) {
-                        double VectorCoef0 = Src2[(i + ii) * Src2SizeOfLine + j];
-                        double VectorCoef1 = Src2[(i + ii + 1) * Src2SizeOfLine + j];
-                        __m256d BaseVectorAVXLine = *((__m256d*)(Src1 + j * Src1SizeOfLine + k + kk));
-
-                        acc0 = _mm256_fmadd_pd(BaseVectorAVXLine,
-                                               _mm256_set1_pd(VectorCoef0),
-                                               acc0
-                        );
-
-                        acc1 = _mm256_fmadd_pd(BaseVectorAVXLine,
-                                               _mm256_set1_pd(VectorCoef1),
-                                               acc1
-                        );
+                    for (unsigned j = BlocksPerVectorRange; j < Src1Cols; ++j) {
+                        acc0 = _mm256_fmadd_pd(B_AVXLINE,_mm256_set1_pd(B_VECTORCOEF0),acc0);
+                        acc1 = _mm256_fmadd_pd(B_AVXLINE,_mm256_set1_pd(B_VECTORCOEF1),acc1);
                     }
 
-                    *((__m256d*)(Target + (i + ii) * TargetSizeOfLine + k + kk)) = _mm256_add_pd(acc0,
-                                                                                                 *((__m256d*)(Target + (i + ii) * TargetSizeOfLine + k + kk))
-                    );
-
-                    *((__m256d*)(Target + (i + ii + 1) * TargetSizeOfLine + k + kk)) = _mm256_add_pd(acc1,
-                                                                                                     *((__m256d*)(Target + (i + ii + 1) * TargetSizeOfLine + k + kk))
-                    );
+                    TAR0 = _mm256_add_pd(acc0, TAR0);
+                    TAR1 = _mm256_add_pd(acc1, TAR1);
                 }
             }
         }
 
-        for (unsigned ii = 0; ii < ElementsInCacheLine; ++ii) {
-            for (unsigned k = BlocksPerBaseVector; k < Src1Rows; ++k) {
+        for (unsigned ii = 0; ii < BlockSize; ++ii) {
+            for (unsigned k = BlocksPerBaseVectorRange; k < Src1Rows; ++k) {
                 double acc0 = 0;
-                for (unsigned j = BlocksPerVector; j < Src2Rows; ++j) {
+                for (unsigned j = BlocksPerVectorRange; j < Src2Rows; ++j) {
                     acc0 += Src1[j * Src1SizeOfLine + k] * Src2[(i + ii) * Src2SizeOfLine + j];
                 }
                 Target[(i + ii) * TargetSizeOfLine + k] += acc0;

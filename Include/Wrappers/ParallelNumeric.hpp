@@ -62,8 +62,9 @@ int FindConsoleWidth() {
 
 
 // Temporary
-#define TotalHWMemory (unsigned long)32768
-#define MaxMemUsage (unsigned long)24576
+#define TOTAL_HW_MEMORY (unsigned long)32768
+#define MAX_MEM_USAGE (unsigned long)24576
+#define MATRIX_MULT_BLOCK_COEF 4
 
 int FindConsoleWidth(); 
 

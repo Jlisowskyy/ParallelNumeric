@@ -125,7 +125,21 @@ public:
 
 	Matrix1& operator=(const Matrix1& x);
 	Matrix1& operator=(Matrix1&& x) noexcept;
-	friend std::ostream& operator<<(std::ostream& out, Matrix1<NumType>& MyMatrix);
+
+	friend std::ostream& operator<<(std::ostream& out, Matrix1& MyMatrix){
+        int MaxMatrixCols = (FindConsoleWidth() - 2) / 6 > 0 ? (FindConsoleWidth() - 2) / 6 : 0;
+
+        out << std::fixed << std::setprecision(3);
+
+        if (MyMatrix.Cols <= (unsigned)MaxMatrixCols) {
+            MyMatrix.PrintWhole(out);
+        }
+        else {
+            MyMatrix.PrintPartitioned(out, MaxMatrixCols);
+        }
+
+        return out;
+    }
 
 private:
 	void PrintWhole(std::ostream& out);
@@ -286,8 +300,9 @@ public:
         MatrixMultInterface* MultMachine = nullptr;
         // Execution unit takes of MultMachine life
 
+        static constexpr unsigned BlockSize = MATRIX_MULT_BLOCK_COEF * Matrix1::ElementsPerCacheLine;
         unsigned Blocks;
-        unsigned TargetHorBlocks = b.Cols / Matrix1::ElementsPerCacheLine;
+        unsigned TargetHorBlocks = b.Cols / BlockSize;
         std::pair<unsigned, unsigned> ThreadInfo;
         // used only as interface with Functor MMThreads
 
@@ -297,16 +312,15 @@ public:
                                                             RetVal.Array, a.Array, b.Array);
             Blocks = TargetHorBlocks;
         } else {
-            unsigned TargetVerBlocks = a.Rows / Matrix1::ElementsPerCacheLine;
+            unsigned TargetVerBlocks = a.Rows / BlockSize;
 
             if (MMThreads.FindOptimalThreadNumber<ThreadCap, Decider>(ThreadInfo, TargetVerBlocks, OpCount)) {
                 Blocks = TargetVerBlocks;
                 std::cerr << "Not Implemented yet!\n";
             } else {
-                unsigned TransMatHorBlocks = a.Cols / Matrix1::ElementsPerCacheLine;
+                unsigned TransMatHorBlocks = a.Cols / BlockSize;
                 MMThreads.FindOptimalThreadNumber<ThreadCap, Decider>(ThreadInfo, TransMatHorBlocks, OpCount);
                 Blocks = TransMatHorBlocks;
-
                 std::cerr << "Not Implemented yet!\n";
             }
         }
@@ -318,22 +332,16 @@ public:
     template<unsigned ThreadCap = 8, unsigned (*Decider)(unsigned long long) = LogarithmicThreads<ThreadCap>>
 	friend Matrix1 operator*(const Matrix1& a, const Matrix1& b){
         if (a.Cols != b.Rows)
-#ifdef _MSC_VER
-            throw std::exception("Not able to perform matrix multiplication - wrong matrix sizes");
-#else
-            throw std::exception();
-#endif
+            throw std::runtime_error("Not able to perform matrix multiplication - wrong matrix sizes\n");
 
         Matrix1 RetVal(a.Rows, b.Cols, (NumType)0);
 
-        // TODO: look for entry level of optimisations to omit all optimisation checks
-
-        unsigned long long OpCount = RetVal.MatrixSize * a.Cols * b.Rows;
-        if (OpCount < MatrixMultThreadsDecider::StartingThreshold) {
-            CCTarHor_MultMachine<NumType> MultMachine(a.Rows, a.Cols, b.Rows, b.Cols, RetVal.SizeOfLine, a.SizeOfLine, b.SizeOfLine,
+        const unsigned long long OpCount = a.Rows * b.Cols * a.Cols;
+        if (OpCount < MatrixMultThreadsDecider::StartingThreshold){
+            CCTarHor_MultMachine MultMachine(a.Rows, a.Cols, b.Rows, b.Cols, RetVal.SizeOfLine, a.SizeOfLine, b.SizeOfLine,
                                                       RetVal.Array, a.Array, b.Array);
 
-            MultMachine.ProcessBlock(0, MultMachine.GetBlockCount());
+            MultMachine.ProcessAllBlocks();
             MultMachine.ProcessFrame();
 
             return RetVal;
@@ -400,7 +408,7 @@ void Matrix1<NumType>::OptimizeResourceManagement(NumType *InitVal)
 
 template<typename NumType>
 Matrix1<NumType>::Matrix1(unsigned int Rows, unsigned int Cols, const NumType *Init, bool ByRow, ResourceManager *MM) :
-        Rows{ Rows }, Cols{ Cols }, Vector<NumType>(ByRow, MM ),
+        Vector<NumType>{ ByRow, MM }, Rows{ Rows }, Cols{ Cols },
         MatrixSize{ (unsigned long)Rows * (unsigned long)Cols }
 {
     PerformSanityChecks();
@@ -411,7 +419,7 @@ Matrix1<NumType>::Matrix1(unsigned int Rows, unsigned int Cols, const NumType *I
 
 template<typename NumType>
 Matrix1<NumType>::Matrix1(unsigned int NNSize, const NumType *Init, bool ByRow, ResourceManager *MM) :
-        Rows{ NNSize }, Cols{ NNSize }, Vector<NumType>(ByRow, MM ),
+        Vector<NumType>{ ByRow, MM }, Rows{ NNSize }, Cols{ NNSize },
         MatrixSize{ (unsigned long)Rows * (unsigned long)Cols }
 {
     PerformSanityChecks();
@@ -455,16 +463,16 @@ Matrix1<NumType>::Matrix1(std::initializer_list<std::initializer_list<NumType>> 
 
 template<typename NumType>
 Matrix1<NumType>::Matrix1(Matrix1 &&Target) noexcept :
-        Rows{ Target.Rows }, Cols{ Target.Cols } , Vector<NumType>{std::move((Vector<NumType>&&)Target) }, MatrixSize{Target.MatrixSize },
-        IsMemoryPacked{ Target.IsMemoryPacked }, OffsetPerLine{ Target.OffsetPerLine }, SizeOfLine{ Target.SizeOfLine }
+        Vector<NumType>{std::move((Vector<NumType>&&)Target) }, Rows{ Target.Rows }, Cols{ Target.Cols } ,  MatrixSize{Target.MatrixSize },
+        OffsetPerLine{ Target.OffsetPerLine },  SizeOfLine{ Target.SizeOfLine }, IsMemoryPacked{ Target.IsMemoryPacked }
 {
     SetupAccess();
 }
 
 template<typename NumType>
 Matrix1<NumType>::Matrix1(const Matrix1 &Target) noexcept :
-        Rows{ Target.Rows }, Cols{ Target.Cols }, MatrixSize{ Target.MatrixSize },
-        IsMemoryPacked{ Target.IsMemoryPacked }, Vector<NumType>(Target),
+        Vector<NumType>(Target), Rows{ Target.Rows }, Cols{ Target.Cols },
+        MatrixSize{ Target.MatrixSize }, IsMemoryPacked{ Target.IsMemoryPacked },
         OffsetPerLine{ Target.OffsetPerLine }, SizeOfLine{ Target.SizeOfLine }
 {
     SetupAccess();
@@ -473,8 +481,9 @@ Matrix1<NumType>::Matrix1(const Matrix1 &Target) noexcept :
 template<typename NumType>
 Matrix1<NumType>::Matrix1(unsigned int Rows, unsigned int Cols, NumType InitVal, bool ByRow,
                           ResourceManager *MM) noexcept :
-        Rows{ Rows }, Cols{ Cols }, MatrixSize { (unsigned long)Rows * (unsigned long)Cols },
-        Vector<NumType>{ByRow, MM }
+        Vector<NumType>{ ByRow, MM }, Rows{ Rows }, Cols{ Cols },
+        MatrixSize { (unsigned long)Rows * (unsigned long)Cols }
+
 {
     PerformSanityChecks();
     SetupAccess();
@@ -483,8 +492,9 @@ Matrix1<NumType>::Matrix1(unsigned int Rows, unsigned int Cols, NumType InitVal,
 
 template<typename NumType>
 Matrix1<NumType>::Matrix1(unsigned int NNSize, NumType InitVal, bool ByRow, ResourceManager *MM) noexcept :
-        Rows{ NNSize }, Cols{ NNSize }, MatrixSize { (unsigned long)NNSize * (unsigned long)NNSize },
-        Vector<NumType>{ByRow, MM }
+        Vector<NumType>{ ByRow, MM }, Rows{ NNSize }, Cols{ NNSize },
+        MatrixSize { (unsigned long)NNSize * (unsigned long)NNSize }
+
 {
     PerformSanityChecks();
     SetupAccess();
@@ -493,8 +503,9 @@ Matrix1<NumType>::Matrix1(unsigned int NNSize, NumType InitVal, bool ByRow, Reso
 
 template<typename NumType>
 Matrix1<NumType>::Matrix1(unsigned int Rows, unsigned int Cols, bool ByRow, ResourceManager *MM) noexcept :
-        Rows{ Rows }, Cols{ Cols }, MatrixSize { (unsigned long)Rows * (unsigned long)Cols },
-        Vector<NumType>{ByRow, MM }
+        Vector<NumType>{ ByRow, MM }, Rows{ Rows }, Cols{ Cols },
+        MatrixSize { (unsigned long)Rows * (unsigned long)Cols }
+
 {
     PerformSanityChecks();
     SetupAccess();
@@ -503,8 +514,9 @@ Matrix1<NumType>::Matrix1(unsigned int Rows, unsigned int Cols, bool ByRow, Reso
 
 template<typename NumType>
 Matrix1<NumType>::Matrix1(unsigned int NNSize, bool ByRow, ResourceManager *MM) noexcept :
-        Rows{ NNSize }, Cols{ NNSize }, MatrixSize{ (unsigned long) NNSize * (unsigned long) NNSize},
-        Vector<NumType>{ByRow, MM }
+        Vector<NumType>{ ByRow, MM }, Rows{ NNSize }, Cols{ NNSize },
+        MatrixSize{ (unsigned long) NNSize * (unsigned long) NNSize}
+
 {
     PerformSanityChecks();
     SetupAccess();
@@ -608,22 +620,6 @@ Matrix1<NumType> &Matrix1<NumType>::operator=(Matrix1 &&x) noexcept {
     SetupAccess();
 
     return *this;
-}
-
-template<typename NumType>
-std::ostream &operator<<(std::ostream &out, Matrix1<NumType> &MyMatrix) {
-    int MaxMatrixCols = (FindConsoleWidth() - 2) / 6 > 0 ? (FindConsoleWidth() - 2) / 6 : 0;
-
-    out << std::fixed << std::setprecision(3);
-
-    if (MyMatrix.Cols <= (unsigned)MaxMatrixCols) {
-        MyMatrix.PrintWhole(out);
-    }
-    else {
-        MyMatrix.PrintPartitioned(out, MaxMatrixCols);
-    }
-
-    return out;
 }
 
 template<typename NumType>

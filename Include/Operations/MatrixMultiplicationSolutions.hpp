@@ -58,7 +58,7 @@ public:
 
 	void MultAlgo1_CC()
 		// The Most common matrix multiplication algorithm with blocking aligned to cache line
-		// Actually works ONLY on perfectly blockable matrices, e.g. nxn, where n is divisible by ElementsInCacheLine
+		// Actually works ONLY on perfectly blockable matrices, e.g. nxn, where n is divisible by BlockSize
 		// 0.23
 	{
 		const unsigned BlocksPerRun = (Src1Cols / ElementsInCacheLine) * ElementsInCacheLine;
@@ -569,7 +569,7 @@ public:
 
 	void MultAlgo2_CC()
 		// Uses definition of matrix as representation of base vectors and multiplication as function affecting vectors
-		// Actually works ONLY on perfectly clickable matrices e.g., nxn, where n is divisible by ElementsInCacheLine
+		// Actually works ONLY on perfectly clickable matrices e.g., nxn, where n is divisible by BlockSize
 		// 0.21
 	{
 		const unsigned VectorsBlocks = (Src2Cols / ElementsInCacheLine) * ElementsInCacheLine;
