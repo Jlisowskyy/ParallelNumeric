@@ -10,75 +10,88 @@
 #include "../Wrappers/OptimalOperations.hpp"
 
 unsigned long long GenerateNumber(unsigned long long MinVal, unsigned long long MaxVal) {
-	return  (unsigned long long)((3 * (double)rand() / (double)RAND_MAX) * (double)(MaxVal - MinVal)) + MinVal;
+    return  (unsigned long long)((3 * (double)rand() / (double)RAND_MAX) * (double)(MaxVal - MinVal)) + MinVal;
 }
 
-template <typename NumType>
+struct DPack
+    // DimsPack
+{
+    unsigned dim1, dim2, dim3;
+};
+
+DPack GenDims(unsigned long long OpCount){
+    unsigned dim1 = GenerateNumber(4, std::cbrt(OpCount));
+    unsigned dim2 = GenerateNumber(2, std::sqrt(OpCount / dim1));
+    unsigned dim3 = OpCount / (dim1 * dim2);
+
+    return {dim1, dim2, dim3};
+}
+
+template <typename NumType, DPack(*GetDims)(unsigned long long) = GenDims>
 bool PerformTest(unsigned long long OperationCount, unsigned RunsToDo, long Seed = 0, bool Verbose = false) {
-	unsigned SuccessfulRuns = 0;
-	long long ShortestRun, LongestRun, LastRun;
-	Timer T1("Every Run Counter", false), T2("Only Succesful Runs Counter");
 
-	if (!Seed) {
-		srand(time(nullptr));
-	}
+    unsigned SuccessfulRuns = 0;
+    long long ShortestRun, LongestRun, LastRun;
+    Timer T1("Every Run Counter", false), T2("Only Succesful Runs Counter", false);
 
-	T1.CalculateAverageTime(RunsToDo, Verbose);
-	T2.CalculateAverageTime(RunsToDo);
+    if (!Seed) {
+        srand(time(nullptr));
+    }
 
-	for (unsigned i = RunsToDo; i; --i) {
-		unsigned long long dim1 = GenerateNumber(4, std::cbrt(OperationCount));
-		unsigned long long dim2 = GenerateNumber(2, std::sqrt(OperationCount / dim1));
-		unsigned long long dim3 = OperationCount / (dim1 * dim2);
-		auto Val1 = (NumType)GenerateNumber(1, 25);
-		auto Val2 = (NumType)GenerateNumber(1, 5);
+    T1.CalculateAverageTime(RunsToDo, Verbose);
+    T2.CalculateAverageTime(RunsToDo);
 
-		Matrix1<NumType> M1(dim1, dim2, Val1);
-		Matrix1<NumType> M2(dim2, dim3, Val2);
+    for (unsigned i = RunsToDo; i; --i) {
 
+        auto Val1 = (NumType)GenerateNumber(1, 25);
+        auto Val2 = (NumType)GenerateNumber(1, 5);
+        DPack d = GetDims(OperationCount);
 
-		T2.Start();
-		T1.Start();
-		Matrix1<NumType> M3 = M1 * M2;
-		LastRun = T1.Stop();
-		T2.Stop();
+        Matrix1<NumType> M1(d.dim1, d.dim2, Val1);
+        Matrix1<NumType> M2(d.dim2, d.dim3, Val2);
 
-		if (i == RunsToDo) {
-			ShortestRun = LongestRun = LastRun;
-		}
-		else {
-			if (LastRun > LongestRun) LongestRun = LastRun;
-			else if (LastRun < ShortestRun) ShortestRun = LastRun;
-		}
+        T2.Start();
+        T1.Start();
+        Matrix1<NumType> M3 = M1 * M2;
+        LastRun = T1.Stop();
+        T2.Stop();
 
-		bool SuccessFlag = M3.CheckForIntegrity((NumType)(dim2 * Val1 * Val2), Verbose);
+        if (i == RunsToDo) {
+            ShortestRun = LongestRun = LastRun;
+        }
+        else {
+            LongestRun = std::max(LastRun, LongestRun);
+            ShortestRun = std::min(LastRun, ShortestRun);
+        }
 
-		if (!SuccessFlag) {
-			T2.InvalidateLastRun();
-		}
-		else ++SuccessfulRuns;
+        bool SuccessFlag = M3.CheckForIntegrity((NumType)(d.dim2 * Val1 * Val2), Verbose);
 
-		if (Verbose) {
-			std::cout << "\nDims:" << dim1 << '\n' << dim2 << '\n' << dim3 << '\n';
-		}
-	}
+        if (!SuccessFlag) {
+            T2.InvalidateLastRun();
+        }
+        else ++SuccessfulRuns;
 
-	std::cout << "With longest time: " << (double)LongestRun * 1e-9 << "(seconds)\nAnd shortest time: "
-		<< (double)ShortestRun * 1e-9 << "(seconds)\nWith seed: " << Seed << std::endl;
+        if (Verbose) {
+            std::cout << "\nDims:" << d.dim1 << '\n' << d.dim2 << '\n' << d.dim3 << '\n';
+        }
+    }
 
-	return SuccessfulRuns == RunsToDo;
+    std::cout << "\n\nWith longest time: " << (double)LongestRun * 1e-9 << "(seconds)\nAnd shortest time: "
+              << (double)ShortestRun * 1e-9 << "(seconds)\nWith seed: " << Seed << std::endl;
+
+    return SuccessfulRuns == RunsToDo;
 }
 
 void PerformMajorTests(unsigned RunsToDo) {
-	unsigned CorrectRuns = 0;
+    unsigned CorrectRuns = 0;
 
-	while (RunsToDo--) {
-		if (PerformTest<double>(1000000000ull, 100, 0)) {
-			++CorrectRuns;
-		}
-	}
+    while (RunsToDo--) {
+        if (PerformTest<double>(1000000000ull, 100, 0)) {
+            ++CorrectRuns;
+        }
+    }
 
-	std::cout << "\n\n" << CorrectRuns << " of " << RunsToDo << " were successful in major test\n";
+    std::cout << "\n\n" << CorrectRuns << " of " << RunsToDo << " were successful in major test\n";
 }
 
 #endif

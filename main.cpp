@@ -49,28 +49,9 @@ int main() {
 
 #elif defined DebugMatrix1
 
-
-using typ = double;
-unsigned dim1 = 1024;
-unsigned dim2 = 1024;
-unsigned dim3 = 1024;
-typ Val = 6;
-
-
 int main() {
-    Matrix1<typ> M1(dim1, dim2, (typ)1);
-    Matrix1<typ> M2(dim2, dim3, Val);
-
-    Timer T1("GENERAL CLOCK", false);
-    Matrix1<typ> M3 = M1 * M2;
-    T1.Stop();
-
-//    M3.CheckForIntegrity((typ)(Val * dim2), true);
-    //PerformTest<double>(1000000000ull, 100, 7, true);
-
-    ////PerformMajorTests(3);
+    PerformTest<double, [](ull opCount) -> DPack{ return {dim,dim,dim} ;}>(1e+9, 1, 69);
 }
-
 
 // Before changes exec time was: 2.94 - 3333/1111
 // Before changes exec time was: 0.6 - 1000/1000
