@@ -36,6 +36,7 @@ add_executable(ParallelNumeric
         Src/Matrix.cpp
         Src/NumericalCore.cpp
         Src/ErrorCodes.cpp
+        Src/MatrixMultiplicationSolutions.cpp
 )
 
 # dodaj zeby podczas kompilacji nie includowalo

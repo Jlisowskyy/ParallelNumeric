@@ -14,6 +14,7 @@
 #include <exception>
 
 #include "Vector.hpp"
+#include "../Operations/MatrixMultiplicationSolutions.hpp"
 
 template<typename NumType>
 class Matrix1 : public Vector<NumType>
@@ -337,12 +338,15 @@ public:
         Matrix1 RetVal(a.Rows, b.Cols, (NumType)0);
 
         const unsigned long long OpCount = a.Rows * b.Cols * a.Cols;
-        if (OpCount < MatrixMultThreadsDecider::StartingThreshold){
-            CCTarHor_MultMachine MultMachine(a.Rows, a.Cols, b.Rows, b.Cols, RetVal.SizeOfLine, a.SizeOfLine, b.SizeOfLine,
+//        if (OpCount < MatrixMultThreadsDecider::StartingThreshold){
+        if (true){
+            SimpleMultMachine MultMachine(a.Rows, a.Cols, b.Rows, b.Cols, RetVal.SizeOfLine, a.SizeOfLine, b.SizeOfLine,
                                                       RetVal.Array, a.Array, b.Array);
 
-            MultMachine.ProcessAllBlocks();
-            MultMachine.ProcessFrame();
+            MultMachine.MultAlgo2_CC();
+
+//            MultMachine.ProcessAllBlocks();
+//            MultMachine.ProcessFrame();
 
             return RetVal;
         }

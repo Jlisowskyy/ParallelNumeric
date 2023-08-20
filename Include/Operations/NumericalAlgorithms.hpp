@@ -41,5 +41,4 @@ T AdaptiveRomberg1(T(*Func)(T), T StartPoint, T StopPoint,
 	return RombergTab[NumOfNodes - 1];
 }
 
-#endif // PAR
-3// ALLELNUM_ALGORITHMS_H
+#endif // PARALLELNUM_ALGORITHMS_H

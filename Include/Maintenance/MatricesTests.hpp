@@ -27,7 +27,7 @@ DPack GenDims(unsigned long long OpCount){
     return {dim1, dim2, dim3};
 }
 
-template <typename NumType, DPack(*GetDims)(unsigned long long) = GenDims>
+template <typename NumType = double , DPack(*GetDims)(unsigned long long) = GenDims>
 bool PerformTest(unsigned long long OperationCount, unsigned RunsToDo, long Seed = 0, bool Verbose = false) {
 
     unsigned SuccessfulRuns = 0;

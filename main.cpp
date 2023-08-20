@@ -49,12 +49,13 @@ int main() {
 
 #elif defined DebugMatrix1
 
+const unsigned dim = 4080;
+
 int main() {
-    PerformTest<double, [](ull opCount) -> DPack{ return {dim,dim,dim} ;}>(1e+9, 1, 69);
+    PerformTest<double, [](unsigned long long opCount) -> DPack{ return {dim,dim,dim} ;}>(1e+9, 1, 69);
 }
 
-// Before changes exec time was: 2.94 - 3333/1111
-// Before changes exec time was: 0.6 - 1000/1000
-// Actual time is: 
+// BEFORE BLOCKING UPDATE: 5.5 on dim dim dim, where dim = 4096
+// AFTER BLOCKING UPDATE: ___
 
 #endif

@@ -115,7 +115,7 @@ void CCTarHor_MultMachine<double>::EEBlocks(const unsigned VectorStartingBlock, 
             // Next iterations without cleaning
         {
             for (unsigned k = 0; k < BlocksPerBaseVectorRange; k += BlockSize) {
-                for (unsigned ii = 0; ii < BlockSize; ii += 3) {
+                for (unsigned ii = 0; ii < BlockSize; ii += 2) {
 
                     for (unsigned kk = 0; kk < BlockSize; kk += 4) {
                         __m256d acc0 = _mm256_setzero_pd();

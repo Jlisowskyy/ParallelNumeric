@@ -28,9 +28,7 @@ class SimpleMultMachine {
 	T* const Target;
 	T* const Src1;
 	T* const Src2;
-    const unsigned VectorBlocksRange;
     const unsigned BlocksPerVectorRange;
-    const unsigned BlocksPerBaseVectorRange;
 public:
 	SimpleMultMachine(const unsigned Src1Rows,
 		const unsigned Src1Cols,
@@ -44,9 +42,12 @@ public:
 		T* const Src2) :
 		Src1Rows{ Src1Rows }, Src1Cols{ Src1Cols }, Src2Rows{ Src2Rows }, Src2Cols{ Src2Cols },
 		TargetSizeOfLine{ TargetSizeOfLine }, Src1SizeOfLine{ Src1SizeOfLine }, Src2SizeOfLine{ Src2SizeOfLine },
-		Target{ Target }, Src1{ Src1 }, Src2{ Src2 }, VectorBlocksRange { BlockSize * (Src2Cols / BlockSize) },
-        BlocksPerVectorRange { (Src2Rows / BlockSize) * BlockSize }, BlocksPerBaseVectorRange { (Src1Rows / BlockSize) * BlockSize }
+		Target{ Target }, Src1{ Src1 }, Src2{ Src2 }, BlocksPerVectorRange { (Src2Rows / BlockSize) * BlockSize }
 	{}
+
+    void kernel(size_t HorizontalCord, size_t VerticalCord, size_t offset) {
+        std::cout << "XD";
+    }
 
 	void MultAlgo()
 		// 0.33
@@ -664,6 +665,9 @@ public:
         RecuMM(0, 0, Src2Cols);
     }
 };
+
+template<>
+void SimpleMultMachine<double>::kernel(size_t HorizontalCord, size_t VerticalCord, size_t offset);
 
 template<>
 void SimpleMultMachine<double>::ProcBlock(unsigned HorizontalCord, unsigned VerticalCord);
