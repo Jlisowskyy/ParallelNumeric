@@ -4,6 +4,9 @@ project(ParallelNumeric)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
+set(gcc_flag "$<COMPILE_LANG_AND_ID:CXX,GNU,LCC>")
+set(clang_flag "$<COMPILE_LANG_AND_ID:CXX,ARMClang,AppleClang,Clang>")
+
 #set(-DCMAKE_TOOLCHAIN_FILE C:/dev/vcpkg/scripts/buildsystems/vcpkg.cmake)
 #find_package(superlu CONFIG REQUIRED)
 #target_link_libraries(main PRIVATE superlu::superlu)
@@ -37,8 +40,18 @@ add_executable(ParallelNumeric
         Src/NumericalCore.cpp
         Src/ErrorCodes.cpp
         Src/MatrixMultiplicationSolutions.cpp
+        Include/Operations/MatrixMultiplication.hpp
+        Src/MatrixMultiplication.cpp
 )
+
+find_package(OpenMP)
+if(OpenMP_CXX_FOUND)
+    target_link_libraries(ParallelNumeric PUBLIC OpenMP::OpenMP_CXX)
+endif()
+
+#target_compile_options(ParallelNumeric PUBLIC "$<${gcc_flag}: -fopenmp;>" "$<${clang_flag}: -fopenmp=libomp;>")
+target_compile_options(ParallelNumeric PUBLIC -Wall;-Wextra;-Wformat=2;-Wunused;-mavx;-mavx2;-mfma;-O3;-fopenmp)
 
 # dodaj zeby podczas kompilacji nie includowalo
 
-target_compile_options(ParallelNumeric PUBLIC -Wall;-Wextra;-Wshadow;-Wformat=2;-Wunused;-mavx;-mavx2;-mfma;-O3)
+

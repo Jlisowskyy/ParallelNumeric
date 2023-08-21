@@ -4,9 +4,9 @@
 #include <cmath>
 #include <windows.h>
 
-#include "/Include/Maintenance/Debuggers.hpp"
-#include "/Include/Maintenance/MatricesTests.hpp"
-#include "/Include/Wrappers/OptimalOperations.hpp"
+#include "Include/Maintenance/Debuggers.hpp"
+#include "Include/Maintenance/MatricesTests.hpp"
+#include "Include/Wrappers/OptimalOperations.hpp"
 
 //#define DebugSumProd
 #define DebugMatrix1
@@ -52,7 +52,7 @@ int main() {
 const unsigned dim = 4080;
 
 int main() {
-    PerformTest<double, [](unsigned long long opCount) -> DPack{ return {dim,dim,dim} ;}>(1e+9, 1, 69);
+    PerformTest<double, [](unsigned long long) -> DPack{ return {dim,dim,dim} ;}>(1e+9, 1, 69);
 }
 
 // BEFORE BLOCKING UPDATE: 5.5 on dim dim dim, where dim = 4096

@@ -5,49 +5,6 @@
 #include "../Include/Operations/NumericalCore.hpp"
 #include "../Include/Maintenance/Debuggers.hpp"
 
-void MatrixMultThreadExecutionUnit::StartExecution() {
-    ThreadPackage& Threads = ResourceManager::GetThreads();
-    unsigned i;
-    for (i = 0; i < ThreadCount-1; ++i) {
-        unsigned Start = i * BlocksPerThread;
-        unsigned Stop = (i + 1) * BlocksPerThread;
-
-        Threads.Array[i] = new std::thread(&MatrixMultThreadExecutionUnit::MatrixMultThread, this, Start, Stop);
-    }
-    unsigned Start = i * BlocksPerThread;
-    Threads.Array[i] = new std::thread(&MatrixMultThreadExecutionUnit::MatrixMultThread, this, Start, Blocks);
-
-    for (unsigned j = 0; j < ThreadCount; ++j) {
-        Threads.Array[j]->join();
-        delete Threads.Array[j];
-    }
-
-    Threads.Release();
-}
-
-#include <string>
-
-void MatrixMultThreadExecutionUnit::MatrixMultThread(unsigned int StartBlock, unsigned int BorderBlock) {
-    Synchronizer.arrive_and_wait();
-
-    std::string name = std::to_string(StartBlock) + ' ' + std::to_string(BorderBlock);
-    Timer T1(name.c_str() , false);
-    (Machine->ProcessBlock)(StartBlock, BorderBlock);
-
-    if (m.try_lock()){ // bullshiet
-        if (!FrameDone){
-            Machine->ProcessFrame();
-            FrameDone = true;
-        }
-
-        m.unlock();
-    }
-
-    m.lock();
-    T1.Stop();
-    m.unlock();
-}
-
 // -----------------------------------------
 // AVX specialisations
 // -----------------------------------------
@@ -62,8 +19,8 @@ void MatrixMultThreadExecutionUnit::MatrixMultThread(unsigned int StartBlock, un
 template<>
 void MatrixSumHelperAlignedArrays(double *Target, const double *const Input1, const double *const Input2,
                                   const unsigned long Elements) {
-    const auto VectInput1 = (const __m256d* const)Input1;
-    const auto VectInput2 = (const __m256d* const)Input2;
+    const auto VectInput1 = (const __m256d*)Input1;
+    const auto VectInput2 = (const __m256d*)Input2;
     auto VectTarget = (__m256d*)Target;
 
     const unsigned long VectSize = Elements / DOUBLE_VECTOR_LENGTH;
@@ -79,8 +36,8 @@ void MatrixSumHelperAlignedArrays(double *Target, const double *const Input1, co
 template<>
 void MatrixSumHelperAlignedArrays(float *Target, const float *const Input1, const float *const Input2,
                                   const unsigned long Elements) {
-    const auto VectInput1 = (const __m256* const)Input1;
-    const auto VectInput2 = (const __m256* const)Input2;
+    const auto VectInput1 = (const __m256*)Input1;
+    const auto VectInput2 = (const __m256*)Input2;
     auto VectTarget = (__m256*)Target;
 
     const unsigned long VectSize = Elements / FLOAT_VECTOR_LENGTH;
@@ -101,218 +58,6 @@ void MatrixSumHelperAlignedArrays(float *Target, const float *const Input1, cons
 
 #if defined(__AVX__) && defined(__FMA__)
 
-#define VECTORCOEF0 Src2[(i + ii) * Src2SizeOfLine + j + jj]
-#define VECTORCOEF1 Src2[(i + ii + 1) * Src2SizeOfLine + j + jj]
-#define AVXLINE *((__m256d*)(Src1 + (j + jj) * Src1SizeOfLine + k + kk))
-#define TAR0 *((__m256d*)(Target + (i + ii) * TargetSizeOfLine + k + kk))
-#define TAR1 *((__m256d*)(Target + (i + ii + 1) * TargetSizeOfLine + k + kk))
-
-template<>
-void CCTarHor_MultMachine<double>::EEBlocks(const unsigned VectorStartingBlock, const unsigned VectorBlocksBorder)
-{
-    for (unsigned i = VectorStartingBlock; i < VectorBlocksBorder; i += BlockSize) {
-        for (unsigned j = 0; j < BlocksPerVectorRange; j += BlockSize)
-            // Next iterations without cleaning
-        {
-            for (unsigned k = 0; k < BlocksPerBaseVectorRange; k += BlockSize) {
-                for (unsigned ii = 0; ii < BlockSize; ii += 2) {
-
-                    for (unsigned kk = 0; kk < BlockSize; kk += 4) {
-                        __m256d acc0 = _mm256_setzero_pd();
-                        __m256d acc1 = _mm256_setzero_pd();
-
-                        for (unsigned jj = 0; jj < BlockSize; ++jj) {
-                            acc0 = _mm256_fmadd_pd(AVXLINE,_mm256_set1_pd(VECTORCOEF0),acc0);
-                            acc1 = _mm256_fmadd_pd(AVXLINE,_mm256_set1_pd(VECTORCOEF1),acc1);
-                        }
-
-                        TAR0 = _mm256_add_pd(acc0, TAR0);
-                        TAR1 = _mm256_add_pd(acc1, TAR1);
-                    }
-                }
-            }
-        }
-    }
-}
-
-template<>
-void CCTarHor_MultMachine<double>::ENBlocks(const unsigned VectorStartingBlock, const unsigned VectorBlocksBorder)
-{
-    for (unsigned i = VectorStartingBlock; i < VectorBlocksBorder; i += BlockSize) {
-        for (unsigned j = 0; j < BlocksPerVectorRange; j += BlockSize)
-            // Next iterations without cleaning
-        {
-            for (unsigned k = 0; k < BlocksPerBaseVectorRange; k += BlockSize) {
-                for (unsigned ii = 0; ii < BlockSize; ii += 3) {
-
-                    for (unsigned kk = 0; kk < BlockSize; kk += 4) {
-                        __m256d acc0 = _mm256_setzero_pd();
-                        __m256d acc1 = _mm256_setzero_pd();
-
-                        for (unsigned jj = 0; jj < BlockSize; ++jj) {
-                            acc0 = _mm256_fmadd_pd(AVXLINE,_mm256_set1_pd(VECTORCOEF0),acc0);
-                            acc1 = _mm256_fmadd_pd(AVXLINE,_mm256_set1_pd(VECTORCOEF1),acc1);
-                        }
-
-                        TAR0 = _mm256_add_pd(acc0, TAR0);
-                        TAR1 = _mm256_add_pd(acc1, TAR1);
-                    }
-                }
-            }
-        }
-#define B_VECTORCOEF0 Src2[(i + ii) * Src2SizeOfLine + j ]
-#define B_VECTORCOEF1 Src2[(i + ii + 1) * Src2SizeOfLine + j]
-#define B_AVXLINE *((__m256d*)(Src1 + j * Src1SizeOfLine + k + kk))
-
-        for (unsigned k = 0; k < BlocksPerBaseVectorRange; k += BlockSize) {
-            for (unsigned ii = 0; ii < BlockSize; ii += 2) {
-
-                for (unsigned kk = 0; kk < BlockSize; kk += 4) {
-                    __m256d acc0 = _mm256_setzero_pd();
-                    __m256d acc1 = _mm256_setzero_pd();
-
-                    for (unsigned j = BlocksPerVectorRange; j < Src1Cols; ++j) {
-                        acc0 = _mm256_fmadd_pd(B_AVXLINE,_mm256_set1_pd(B_VECTORCOEF0),acc0);
-                        acc1 = _mm256_fmadd_pd(B_AVXLINE,_mm256_set1_pd(B_VECTORCOEF1),acc1);
-                    }
-
-                    TAR0 = _mm256_add_pd(acc0, TAR0);
-                    TAR1 = _mm256_add_pd(acc1, TAR1);
-                }
-            }
-        }
-    }
-}
-
-template<>
-void CCTarHor_MultMachine<double>::NEBlocks(const unsigned VectorStartingBlock, const unsigned VectorBlocksBorder)
-{
-    for (unsigned i = VectorStartingBlock; i < VectorBlocksBorder; i += BlockSize) {
-        for (unsigned j = 0; j < BlocksPerVectorRange; j += BlockSize)
-            // Next iterations without cleaning
-        {
-            for (unsigned k = 0; k < BlocksPerBaseVectorRange; k += BlockSize) {
-                for (unsigned ii = 0; ii < BlockSize; ii += 3) {
-
-                    for (unsigned kk = 0; kk < BlockSize; kk += 4) {
-                        __m256d acc0 = _mm256_setzero_pd();
-                        __m256d acc1 = _mm256_setzero_pd();
-
-                        for (unsigned jj = 0; jj < BlockSize; ++jj) {
-                            acc0 = _mm256_fmadd_pd(AVXLINE,_mm256_set1_pd(VECTORCOEF0),acc0);
-                            acc1 = _mm256_fmadd_pd(AVXLINE,_mm256_set1_pd(VECTORCOEF1),acc1);
-                        }
-
-                        TAR0 = _mm256_add_pd(acc0, TAR0);
-                        TAR1 = _mm256_add_pd(acc1, TAR1);
-                    }
-                }
-            }
-
-            for (unsigned ii = 0; ii < BlockSize; ii += 4) {
-                for (unsigned k = BlocksPerBaseVectorRange; k < Src1Rows; ++k) {
-                    double acc0 = 0;
-                    double acc1 = 0;
-                    double acc2 = 0;
-                    double acc3 = 0;
-
-                    for (unsigned jj = 0; jj < BlockSize; ++jj) {
-                        acc0 += Src1[(j + jj) * Src1SizeOfLine + k] * Src2[(i + ii) * Src2SizeOfLine + j + jj];
-                        acc1 += Src1[(j + jj) * Src1SizeOfLine + k] * Src2[(i + ii + 1) * Src2SizeOfLine + j + jj];
-                        acc2 += Src1[(j + jj) * Src1SizeOfLine + k] * Src2[(i + ii + 2) * Src2SizeOfLine + j + jj];
-                        acc3 += Src1[(j + jj) * Src1SizeOfLine + k] * Src2[(i + ii + 3) * Src2SizeOfLine + j + jj];
-                    }
-
-
-                    Target[(i + ii) * TargetSizeOfLine + k] += acc0;
-                    Target[(i + ii + 1) * TargetSizeOfLine + k] += acc1;
-                    Target[(i + ii + 2) * TargetSizeOfLine + k] += acc2;
-                    Target[(i + ii + 3) * TargetSizeOfLine + k] += acc3;
-
-                }
-            }
-        }
-    }
-}
-
-template<>
-void CCTarHor_MultMachine<double>::NNBlocks(const unsigned VectorStartingBlock, const unsigned VectorBlocksBorder)
-{
-    for (unsigned i = VectorStartingBlock; i < VectorBlocksBorder; i += BlockSize) {
-        for (unsigned j = 0; j < BlocksPerVectorRange; j += BlockSize)
-            // Next iterations without cleaning
-        {
-            for (unsigned k = 0; k < BlocksPerBaseVectorRange; k += BlockSize) {
-                for (unsigned ii = 0; ii < BlockSize; ii += 3) {
-
-                    for (unsigned kk = 0; kk < BlockSize; kk += 4) {
-                        __m256d acc0 = _mm256_setzero_pd();
-                        __m256d acc1 = _mm256_setzero_pd();
-
-                        for (unsigned jj = 0; jj < BlockSize; ++jj) {
-                            acc0 = _mm256_fmadd_pd(AVXLINE,_mm256_set1_pd(VECTORCOEF0),acc0);
-                            acc1 = _mm256_fmadd_pd(AVXLINE,_mm256_set1_pd(VECTORCOEF1),acc1);
-                        }
-
-                        TAR0 = _mm256_add_pd(acc0, TAR0);
-                        TAR1 = _mm256_add_pd(acc1, TAR1);
-                    }
-                }
-            }
-
-            for (unsigned ii = 0; ii < BlockSize; ii += 4) {
-                for (unsigned k = BlocksPerBaseVectorRange; k < Src1Rows; ++k) {
-                    double acc0 = 0;
-                    double acc1 = 0;
-                    double acc2 = 0;
-                    double acc3 = 0;
-
-                    for (unsigned jj = 0; jj < BlockSize; ++jj) {
-                        acc0 += Src1[(j + jj) * Src1SizeOfLine + k] * Src2[(i + ii) * Src2SizeOfLine + j + jj];
-                        acc1 += Src1[(j + jj) * Src1SizeOfLine + k] * Src2[(i + ii + 1) * Src2SizeOfLine + j + jj];
-                        acc2 += Src1[(j + jj) * Src1SizeOfLine + k] * Src2[(i + ii + 2) * Src2SizeOfLine + j + jj];
-                        acc3 += Src1[(j + jj) * Src1SizeOfLine + k] * Src2[(i + ii + 3) * Src2SizeOfLine + j + jj];
-                    }
-
-
-                    Target[(i + ii) * TargetSizeOfLine + k] += acc0;
-                    Target[(i + ii + 1) * TargetSizeOfLine + k] += acc1;
-                    Target[(i + ii + 2) * TargetSizeOfLine + k] += acc2;
-                    Target[(i + ii + 3) * TargetSizeOfLine + k] += acc3;
-
-                }
-            }
-        }
-
-        for (unsigned k = 0; k < BlocksPerBaseVectorRange; k += BlockSize) {
-            for (unsigned ii = 0; ii < BlockSize; ii += 2) {
-
-                for (unsigned kk = 0; kk < BlockSize; kk += 4) {
-                    __m256d acc0 = _mm256_setzero_pd();
-                    __m256d acc1 = _mm256_setzero_pd();
-
-                    for (unsigned j = BlocksPerVectorRange; j < Src1Cols; ++j) {
-                        acc0 = _mm256_fmadd_pd(B_AVXLINE,_mm256_set1_pd(B_VECTORCOEF0),acc0);
-                        acc1 = _mm256_fmadd_pd(B_AVXLINE,_mm256_set1_pd(B_VECTORCOEF1),acc1);
-                    }
-
-                    TAR0 = _mm256_add_pd(acc0, TAR0);
-                    TAR1 = _mm256_add_pd(acc1, TAR1);
-                }
-            }
-        }
-
-        for (unsigned ii = 0; ii < BlockSize; ++ii) {
-            for (unsigned k = BlocksPerBaseVectorRange; k < Src1Rows; ++k) {
-                double acc0 = 0;
-                for (unsigned j = BlocksPerVectorRange; j < Src2Rows; ++j) {
-                    acc0 += Src1[j * Src1SizeOfLine + k] * Src2[(i + ii) * Src2SizeOfLine + j];
-                }
-                Target[(i + ii) * TargetSizeOfLine + k] += acc0;
-            }
-        }
-    }
-}
 #endif // __AVX__ __FMA__
 
 // ------------------------------------------
@@ -323,8 +68,8 @@ void CCTarHor_MultMachine<double>::NNBlocks(const unsigned VectorStartingBlock, 
 
 template<>
 double DotProduct(double *const Src1, double *const Src2, unsigned long Range) {
-    auto VectSrc1 = (__m256d* const) Src1;
-    auto VectSrc2 = (__m256d* const) Src2;
+    const auto VectSrc1 = (__m256d*) Src1;
+    const auto VectSrc2 = (__m256d*) Src2;
     __m256d Store = _mm256_set_pd(0, 0, 0, 0);
 
     const unsigned long VectRange = Range/4;
@@ -360,8 +105,8 @@ DotProductMachineChunked<float>::DotProductMachineChunked(const float* const Src
 
 template<>
 void DotProductMachineChunked<double>::StartThread(const unsigned ThreadID) {
-    const auto VectSrc1 = (const __m256d* const) Src1;
-    const auto VectSrc2 = (const __m256d* const) Src2;
+    const auto VectSrc1 = (const __m256d*) Src1;
+    const auto VectSrc2 = (const __m256d*) Src2;
     __m256d Store = _mm256_set_pd(0, 0, 0, 0);
     const unsigned long LoopRange = (ThreadID + 1) * ElemPerThread;
 
@@ -378,8 +123,8 @@ void DotProductMachineChunked<double>::StartThread(const unsigned ThreadID) {
 template<>
 void DotProductMachineChunked<float>::StartThread(const unsigned ThreadID) {
     Counter.arrive_and_wait();
-    auto VectSrc1 = (__m256* const) Src1;
-    auto VectSrc2 = (__m256* const) Src2;
+    const auto VectSrc1 = (__m256*) Src1;
+    const auto VectSrc2 = (__m256*) Src2;
     __m256 Store = _mm256_set_ps(0, 0, 0, 0, 0, 0, 0, 0);
 
     const unsigned long LoopRange = (ThreadID + 1) * ElemPerThread;
@@ -414,8 +159,8 @@ DotProductMachineComb<float>::DotProductMachineComb(const float* const Src1, con
 template<>
 void DotProductMachineComb<double>::StartThread(const unsigned ThreadID)
 {
-    const __m256d* const VectSrc1 = ((__m256d* const) Src1) + PerCircle * ThreadID;
-    const __m256d* const VectSrc2 = ((__m256d* const) Src2) + PerCircle * ThreadID;
+    const auto VectSrc1 = ((const __m256d*) Src1) + PerCircle * ThreadID;
+    const auto VectSrc2 = ((const __m256d*) Src2) + PerCircle * ThreadID;
     __m256d Store = _mm256_set_pd(0, 0, 0, 0);
 
     const unsigned long Jump = Threads * PerCircle;
@@ -442,8 +187,8 @@ void DotProductMachineComb<double>::StartThread(const unsigned ThreadID)
 template<>
 void DotProductMachineComb<float>::StartThread(const unsigned ThreadID)
 {
-    const __m256* const VectSrc1 = ((__m256* const) Src1) + PerCircle * ThreadID;
-    const __m256* const VectSrc2 = ((__m256* const) Src2) + PerCircle * ThreadID;
+    const auto VectSrc1 = ((const __m256*) Src1) + PerCircle * ThreadID;
+    const auto VectSrc2 = ((const __m256*) Src2) + PerCircle * ThreadID;
     __m256 Store = _mm256_set_ps(0, 0, 0, 0, 0, 0, 0, 0);
 
     const unsigned long Jump = Threads * PerCircle;

@@ -4,9 +4,17 @@
 #ifndef PARALLELNUM_RESOURCE_MANAGER_H
 #define PARALLELNUM_RESOURCE_MANAGER_H
 
-#include "..\Wrappers\ParallelNumeric.hpp"
 #include <malloc.h>
 #include <exception>
+#include <cmath>
+
+#include "..\Wrappers\ParallelNumeric.hpp"
+
+template<unsigned ThreadCap = MaxCPUThreads>
+inline unsigned LogarithmicThreads(unsigned long long);
+
+template<unsigned ThreadCap = MaxCPUThreads>
+inline unsigned LinearThreads(unsigned long long);
 
 class Region{
     static constexpr int MB = 1024 * 1024;
@@ -126,6 +134,18 @@ public:
         MemoryAssets[0]->Allocate(ArrayPtr, ArraySize);
     }
 };
+
+template<unsigned ThreadCap>
+unsigned LogarithmicThreads(const unsigned long long int Elements) {
+    auto Ret = (unsigned)(log2((double) (Elements / ThreadedStartingThreshold) )) + 1u;
+    return std::min(ThreadCap, Ret);
+}
+
+template<unsigned ThreadCap>
+unsigned LinearThreads(const unsigned long long int Elements) {
+    auto Ret = (unsigned)(Elements / ThreadedStartingThreshold);
+    return std::min(ThreadCap, Ret);
+}
 
 //void ResourceManagerThread() {
 //

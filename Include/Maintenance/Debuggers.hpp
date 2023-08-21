@@ -26,8 +26,8 @@ class Timer {
 	}
 
 public:
-	Timer(const char* TimerName = nullptr, bool WOD = true) :
-        TimerName{ TimerName }, WriteOnDeath{ WOD }, TimerID{ TimerCount++ }
+	Timer(const char* YourName = nullptr, bool WOD = true) :
+        TimerName{ YourName }, WriteOnDeath{ WOD }, TimerID{ TimerCount++ }
 	{
 		Start();
 	}

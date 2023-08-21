@@ -3,6 +3,7 @@
 //
 
 #include "../Include/Operations/MatrixMultiplicationSolutions.hpp"
+#include <omp.h>
 
 #define VECTORCOEF0 Src2[(i + ii) * Src2SizeOfLine + j + jj]
 #define VECTORCOEF1 Src2[(i + ii + 1) * Src2SizeOfLine + j + jj]
@@ -62,11 +63,11 @@ void SimpleMultMachine<double>::RecuMM(unsigned HorizotnalCord, unsigned Vertica
 
 template<>
 void SimpleMultMachine<double>::kernel(size_t HorizontalCord, size_t VerticalCord, size_t offset)
-#define VectPartUpperPtr Src1 + offset * Src1SizeOfLine + VerticalCord
-#define VectPartLowerPtr Src1 + offset * Src1SizeOfLine + VerticalCord + 4
-#define LoadVectCoef(shift) Src2[HorizontalCord * Src2SizeOfLine + offset + shift]
-#define OnTargetVectUpper(shift) *((__m256*) (Target + (HorizontalCord + shift) * TargetSizeOfLine + VerticalCord))
-#define OnTargetVectLower(shift) *((__m256*) (Target + (HorizontalCord + shift) * TargetSizeOfLine + VerticalCord + 4))
+#define VectPartUpperPtr Src1 + (offset + kk) * Src1SizeOfLine + VerticalCord
+#define VectPartLowerPtr Src1 + (offset + kk) * Src1SizeOfLine + VerticalCord + 4
+#define LoadVectCoef(shift) Src2[HorizontalCord * Src2SizeOfLine + offset + shift + kk]
+#define OnTargetVectUpper(shift) *((__m256d*) (Target + (HorizontalCord + shift) * TargetSizeOfLine + VerticalCord))
+#define OnTargetVectLower(shift) *((__m256d*) (Target + (HorizontalCord + shift) * TargetSizeOfLine + VerticalCord + 4))
 {
     __m256d VectCoefBuff0;
     __m256d VectCoefBuff1;
@@ -87,6 +88,9 @@ void SimpleMultMachine<double>::kernel(size_t HorizontalCord, size_t VerticalCor
     __m256d ResVectBuffLower5  = _mm256_setzero_pd();
 
     for(size_t kk = 0; kk < 240; ++kk){
+//        __builtin_prefetch(VectPartUpperPtr + Src1SizeOfLine);
+//        __builtin_prefetch(VectPartLowerPtr + Src1SizeOfLine);
+
         VectPartBuffUpper = _mm256_load_pd(VectPartUpperPtr);
         VectPartBuffLower = _mm256_load_pd(VectPartLowerPtr);
 
@@ -129,16 +133,13 @@ void SimpleMultMachine<double>::kernel(size_t HorizontalCord, size_t VerticalCor
     OnTargetVectLower(5) += ResVectBuffLower5;
 }
 
-#pragma clang diagnostic push
 template<>
-void SimpleMultMachine<double>::MultAlgo2_CC_Blocks_EE(const unsigned VectorsBlocks, const unsigned BlocksPerVector, const unsigned BlocksPerBaseVectors,
-                                                       const unsigned VectorsStartingBlock)
-// AVX READY version of previous algorithm
-// 0.06
-{
-    for (size_t i = 0; i < Src1Rows; i += Src1Rows){
+void SimpleMultMachine<double>::L3BLOCKED(const unsigned VectorsBlocks, const unsigned BlocksPerVector, const unsigned BlocksPerBaseVectors,
+                                          const unsigned VectorsStartingBlock){
+    for (size_t i = 0; i < Src1Rows; i += Src1Rows){ //12240
         for(size_t k = 0; k < Src2Rows; k += 240){
             for(size_t j = 0; j < Src2Cols; j += 1020){
+                #pragma omp parallel for
                 for(size_t ii = 0; ii < Src2Cols; ii += 8){
                     for(size_t jj = 0; jj < 1020; jj += 6){
                         kernel(jj + j, ii + i, k);
@@ -147,33 +148,45 @@ void SimpleMultMachine<double>::MultAlgo2_CC_Blocks_EE(const unsigned VectorsBlo
             }
         }
     }
+}
 
 
+void MultAlgo2_Kernel(){}
 
 
-//    for (unsigned i = VectorsStartingBlock; i < VectorsBlocks; i += BlockSize) {
-//        for (unsigned j = 0; j < BlocksPerVector; j += BlockSize)
-//            // Next iterations without cleaning
-//        {
-//            for (unsigned k = 0; k < BlocksPerBaseVectors; k += BlockSize) {
-//                for (unsigned ii = 0; ii < BlockSize; ii += 2) {
-//
-//                    for (unsigned kk = 0; kk < BlockSize; kk += 4) {
-//                        __m256d acc0 = _mm256_setzero_pd();
-//                        __m256d acc1 = _mm256_setzero_pd();
-//
-//                        for (unsigned jj = 0; jj < BlockSize; ++jj) {
-//                            acc0 = _mm256_fmadd_pd(AVXLINE,_mm256_set1_pd(VECTORCOEF0),acc0);
-//                            acc1 = _mm256_fmadd_pd(AVXLINE,_mm256_set1_pd(VECTORCOEF1),acc1);
-//                        }
-//
-//                        TAR0 = _mm256_add_pd(acc0, TAR0);
-//                        TAR1 = _mm256_add_pd(acc1, TAR1);
-//                    }
-//                }
-//            }
-//        }
-//    }
+template<>
+void SimpleMultMachine<double>::MultAlgo2_CC_Blocks_EE(const unsigned VectorsBlocks, const unsigned BlocksPerVector, const unsigned BlocksPerBaseVectors,
+                                                       const unsigned VectorsStartingBlock)
+{
+    for (unsigned i = VectorsStartingBlock; i < VectorsBlocks; i += 8) {
+        for (unsigned j = 0; j < BlocksPerVector; j += 8)
+            // Next iterations without cleaning
+        {
+            for (unsigned k = 0; k < BlocksPerBaseVectors; k += 8) {
+                for (unsigned ii = 0; ii < 8; ii += 2) {
+
+                    for (unsigned kk = 0; kk < BlockSize; kk += 4) {
+                        __m256d acc0 = _mm256_setzero_pd();
+                        __m256d acc1 = _mm256_setzero_pd();
+                        __m256d acc2 = _mm256_setzero_pd();
+                        __m256d acc3 = _mm256_setzero_pd();
+
+                        for (unsigned jj = 0; jj < BlockSize; ++jj) {
+                            acc0 = _mm256_fmadd_pd(AVXLINE,_mm256_set1_pd(VECTORCOEF0),acc0);
+                            acc1 = _mm256_fmadd_pd(AVXLINE,_mm256_set1_pd(VECTORCOEF1),acc1);
+                            acc2 = _mm256_fmadd_pd(AVXLINE,_mm256_set1_pd(VECTORCOEF2),acc2);
+                            acc3 = _mm256_fmadd_pd(AVXLINE,_mm256_set1_pd(VECTORCOEF3),acc3);
+                        }
+
+                        TAR0 = _mm256_add_pd(acc0, TAR0);
+                        TAR1 = _mm256_add_pd(acc1, TAR1);
+                        TAR2 = _mm256_add_pd(acc2, TAR2);
+                        TAR3 = _mm256_add_pd(acc3, TAR3);
+                    }
+                }
+            }
+        }
+    }
 }
 #pragma clang diagnostic pop
 

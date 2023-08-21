@@ -664,6 +664,9 @@ public:
     {
         RecuMM(0, 0, Src2Cols);
     }
+
+    void L3BLOCKED(const unsigned VectorsBlocks, const unsigned BlocksPerVector, const unsigned BlocksPerBaseVectors,
+                   const unsigned VectorsStartingBlock) {}
 };
 
 template<>
@@ -695,5 +698,9 @@ void SimpleMultMachine<double>::MultAlgo2_CC_Blocks_NN(const unsigned VectorsBlo
 
 template<>
 void SimpleMultMachine<double>::MultAlgo1_CC();
+
+template<>
+void SimpleMultMachine<double>::L3BLOCKED(const unsigned VectorsBlocks, const unsigned BlocksPerVector, const unsigned BlocksPerBaseVectors,
+               const unsigned VectorsStartingBlock);
 
 #endif //PARALLELNUM_MATRIX_MULTIPLICATION_H_

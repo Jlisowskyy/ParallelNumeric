@@ -14,7 +14,7 @@
 #include <exception>
 
 #include "Vector.hpp"
-#include "../Operations/MatrixMultiplicationSolutions.hpp"
+#include "../Operations/MatrixMultiplication.hpp"
 
 template<typename NumType>
 class Matrix1 : public Vector<NumType>
@@ -294,66 +294,21 @@ public:
         else
             return MatrixSumDiffAccess<ThreadCap, Decider>(a, b);
     }
-
-    template<unsigned ThreadCap, unsigned (*Decider)(unsigned long long)>
-    friend MatrixMultThreadExecutionUnit FindMatchingAlgorithm(const Matrix1& a, const Matrix1& b, Matrix1& RetVal,
-                                                        unsigned long long OpCount){
-        MatrixMultInterface* MultMachine = nullptr;
-        // Execution unit takes of MultMachine life
-
-        static constexpr unsigned BlockSize = MATRIX_MULT_BLOCK_COEF * Matrix1::ElementsPerCacheLine;
-        unsigned Blocks;
-        unsigned TargetHorBlocks = b.Cols / BlockSize;
-        std::pair<unsigned, unsigned> ThreadInfo;
-        // used only as interface with Functor MMThreads
-
-        if (MMThreads.FindOptimalThreadNumber<ThreadCap, Decider>(ThreadInfo, TargetHorBlocks, OpCount)) {
-            MultMachine = new CCTarHor_MultMachine<NumType>(a.Rows, a.Cols, b.Rows, b.Cols, RetVal.SizeOfLine, a.SizeOfLine,
-                                                            b.SizeOfLine,
-                                                            RetVal.Array, a.Array, b.Array);
-            Blocks = TargetHorBlocks;
-        } else {
-            unsigned TargetVerBlocks = a.Rows / BlockSize;
-
-            if (MMThreads.FindOptimalThreadNumber<ThreadCap, Decider>(ThreadInfo, TargetVerBlocks, OpCount)) {
-                Blocks = TargetVerBlocks;
-                std::cerr << "Not Implemented yet!\n";
-            } else {
-                unsigned TransMatHorBlocks = a.Cols / BlockSize;
-                MMThreads.FindOptimalThreadNumber<ThreadCap, Decider>(ThreadInfo, TransMatHorBlocks, OpCount);
-                Blocks = TransMatHorBlocks;
-                std::cerr << "Not Implemented yet!\n";
-            }
-        }
-
-        return {MultMachine, ThreadInfo.first, ThreadInfo.second, Blocks};
+private:
+    template<typename NumT>
+    friend inline GPMM<NumT> GetMultMachine(const Matrix1<NumT>& A, const Matrix1<NumT>& B, const Matrix1<NumT>& C){
+        return GPMM<NumType>(A.Array, B.Array, C.Array, A.Rows, A.Cols, B.Cols, A.SizeOfLine, B.SizeOfLine, C.SizeOfLine);
     }
 
-
+public:
     template<unsigned ThreadCap = 8, unsigned (*Decider)(unsigned long long) = LogarithmicThreads<ThreadCap>>
-	friend Matrix1 operator*(const Matrix1& a, const Matrix1& b){
-        if (a.Cols != b.Rows)
+	friend Matrix1 operator*(const Matrix1& A, const Matrix1& B){
+        if (A.Cols != B.Rows)
             throw std::runtime_error("Not able to perform matrix multiplication - wrong matrix sizes\n");
 
-        Matrix1 RetVal(a.Rows, b.Cols, (NumType)0);
-
-        const unsigned long long OpCount = a.Rows * b.Cols * a.Cols;
-//        if (OpCount < MatrixMultThreadsDecider::StartingThreshold){
-        if (true){
-            SimpleMultMachine MultMachine(a.Rows, a.Cols, b.Rows, b.Cols, RetVal.SizeOfLine, a.SizeOfLine, b.SizeOfLine,
-                                                      RetVal.Array, a.Array, b.Array);
-
-            MultMachine.MultAlgo2_CC();
-
-//            MultMachine.ProcessAllBlocks();
-//            MultMachine.ProcessFrame();
-
-            return RetVal;
-        }
-
-        // Start Threaded execution
-        MatrixMultThreadExecutionUnit Executioner = FindMatchingAlgorithm<ThreadCap, Decider>(a,b,RetVal, OpCount);
-        Executioner.StartExecution();
+        Matrix1 RetVal(A.Rows, B.Cols, (NumType)0);
+        GPMM<NumType> MultMachine = GetMultMachine(A,B,RetVal);
+        MultMachine.CCPerform();
 
         return RetVal;
     }
