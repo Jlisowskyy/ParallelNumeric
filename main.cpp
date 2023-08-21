@@ -49,10 +49,10 @@ int main() {
 
 #elif defined DebugMatrix1
 
-const unsigned dim = 4080;
+const unsigned dim = 1020;
 
 int main() {
-    PerformTest<double, [](unsigned long long) -> DPack{ return {dim,dim,dim} ;}>(1e+9, 1, 69);
+    PerformTest(1e+9, 100, 69, true);
 }
 
 // BEFORE BLOCKING UPDATE: 5.5 on dim dim dim, where dim = 4096

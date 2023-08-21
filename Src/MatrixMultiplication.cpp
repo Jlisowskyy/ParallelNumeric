@@ -7,7 +7,7 @@
 #define min(a, b) a > b ? b : a
 
 template<>
-void GPMM<double>::CCKernel8x6(const size_t HorizontalCord, const size_t VerticalCord, const size_t Dim2Off)
+inline void GPMM<double>::CCKernelXx6(const size_t HorizontalCord, const size_t VerticalCord, const size_t Dim2Off)
 #define VectPartUpperPtr MatA + kk * MatASoL + VerticalCord
 #define VectPartLowerPtr MatA + kk * MatASoL + VerticalCord + 4
 #define LoadVectCoef(shift) MatB[HorizontalCord * MatBSoL + shift + kk]
@@ -82,20 +82,70 @@ void GPMM<double>::CCKernel8x6(const size_t HorizontalCord, const size_t Vertica
     OnTargetVectLower(5) += ResVectBuffLower5;
 }
 
+template<>
+inline void GPMM<double>::CCKernelXxY(size_t HorizontalCord, size_t VerticalCord, size_t Dim2Off, size_t HorKernelSize){
+    __m256d VectPartBuffUpper;
+    __m256d VectPartBuffLower;
+    __m256d VectCoefBuff;
+
+    // Distance between Upper and Lower buffer of the corresponding vector
+    static constexpr size_t TabOffset = (HorInBlockSize - 1);
+    static constexpr size_t TabSize = 2 * TabOffset;
+    __m256d ResultBuff[TabSize] = { _mm256_setzero_pd() };
+
+    const size_t LoopRange = min(Dim2, Dim2Off + Dim2Part);
+
+    for(size_t kk = Dim2Off; kk < LoopRange; ++kk){
+#ifndef __clang__
+        __builtin_prefetch(VectPartUpperPtr + MatASoL);
+        __builtin_prefetch(VectPartLowerPtr + MatASoL);
+#endif
+
+        VectPartBuffUpper = _mm256_load_pd(VectPartUpperPtr);
+        VectPartBuffLower = _mm256_load_pd(VectPartLowerPtr);
+
+        for (size_t i = 0; i < HorKernelSize; ++i ){
+            VectCoefBuff = _mm256_set1_pd(LoadVectCoef(i));
+
+            ResultBuff[i] = _mm256_fmadd_pd(VectPartBuffUpper, VectCoefBuff, ResultBuff[i]);
+            ResultBuff[i + TabOffset] = _mm256_fmadd_pd(VectPartBuffLower, VectCoefBuff, ResultBuff[i + TabOffset]);
+        }
+    }
+
+    for (size_t i = 0; i < HorKernelSize; ++i ){
+        OnTargetVectUpper(i) += ResultBuff[i];
+        OnTargetVectLower(i) += ResultBuff[i + TabOffset];
+    }
+}
+
+template<>
+inline void GPMM<double>::CCInnerParts(const size_t VerOut, const size_t HorOut, const size_t Dim2Outer){
+    static constexpr size_t VerInBlockSize = 8;
+    const size_t HorInMaxRange = min(HorOut + Dim3Part, Dim3);
+    const size_t HorInFullyBlockedRange = (HorInMaxRange / HorInBlockSize ) * HorInBlockSize;
+    const size_t VerInRange = min(VerOut + Dim1Part, Dim1);
+
+//    #pragma omp parallel for
+    for(size_t VerIn = VerOut; VerIn < VerInRange; VerIn += VerInBlockSize){
+        for(size_t HorIn = HorOut; HorIn < HorInFullyBlockedRange; HorIn += HorInBlockSize){
+            CCKernelXx6(HorIn, VerIn, Dim2Outer);
+        }
+        if (HorInMaxRange != HorInFullyBlockedRange){
+            CCKernelXxY(HorInFullyBlockedRange, VerIn, Dim2Outer, HorInMaxRange - HorInFullyBlockedRange);
+        }
+    }
+}
+
 #pragma clang diagnostic push
 #pragma ide diagnostic ignored "UnreachableCode"
 template<>
 void GPMM<double>::CCPerform()
     // Vertical and horizontal position refers to actually filling block on C matrix
 {
-    for (size_t VerticalOuter = 0; VerticalOuter < Dim1; VerticalOuter += Dim1Part){
+    for (size_t VerOut = 0; VerOut < Dim1; VerOut += Dim1Part){
         for(size_t Dim2Outer = 0; Dim2Outer < Dim2; Dim2Outer += Dim2Part){
-            for(size_t HorizontalOuter = 0; HorizontalOuter < Dim3; HorizontalOuter += Dim3Part){
-                for(size_t VerticalInner = 0; VerticalInner < Dim3; VerticalInner += 8){
-                    for(size_t HorizontalInner = 0; HorizontalInner < Dim3Part; HorizontalInner += 6){
-                        CCKernel8x6(HorizontalInner + HorizontalOuter, VerticalInner + VerticalOuter, Dim2Outer);
-                    }
-                }
+            for(size_t HorOut = 0; HorOut < Dim3; HorOut += Dim3Part){
+                CCInnerParts(VerOut, HorOut, Dim2Outer);
             }
         }
     }

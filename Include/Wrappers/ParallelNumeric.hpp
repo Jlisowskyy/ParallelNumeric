@@ -11,11 +11,14 @@
 
 #define DOUBLE_VECTOR_LENGTH (unsigned long)4
 #define FLOAT_VECTOR_LENGTH (unsigned long)8
-#define PACKAGE_SIZE (unsigned long)256
+#define BYTE_SIZE 8
+#define AVX_SIZE 256
 #define ALIGN 64
 #define CACHE_LINE 64
 
+// Compilation controllers
 #define DEBUG_
+//#define OPTIMISE_MEM_
 
 const long long unsigned ThreadedStartingThreshold = 32768;
 const unsigned BasicThreadPool = 8;

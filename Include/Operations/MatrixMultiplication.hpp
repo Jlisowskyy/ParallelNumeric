@@ -29,17 +29,21 @@ class GPMM
         //          ^  |         |    |         | <--- Positions refers to indexes on C matrix
         //     Dim1 |  |  MatA   |    |  MatC   |
         //          |  |_________|    |_________|
+        // Not fully optimized for short A matrix
 {
-    // Chosen for specific cpu attributes
-    const size_t Dim2Part = 240;
-    const size_t Dim1Part = 12240;
-    const size_t Dim3Part = 1020;
+    // Chosen blocking parameters for specific cpu attributes
+    static constexpr size_t Dim1Part = 12240;
+    static constexpr size_t Dim2Part = 240;
+    static constexpr size_t Dim3Part = 1020;
+    static constexpr size_t HorInBlockSize = 6;
 
+    // Matrices parameters
     const NumType* const MatA;
     const NumType* const MatB;
     NumType* const MatC;
     size_t Dim1, Dim2, Dim3;
     size_t MatASoL, MatBSoL, MatCSoL; // Size of single line necessary, caused by applied alignment
+
 public:
     GPMM(const NumType* MatAData, const NumType* MatBData, NumType* MatCData,
          size_t Dim1, size_t Dim2, size_t Dim3,
@@ -50,9 +54,18 @@ public:
     } // TODO
 
 private:
-    void CCKernel8x6(size_t HorizontalCord, size_t VerticalCord, size_t Dim2Off){
-        std::cerr << "[ERROR] GENERAL KERNEL8X6 NOT IMPLEMENTED YET\n";
+    inline void CCKernelXx6(size_t HorizontalCord, size_t VerticalCord, size_t Dim2Off){
+        std::cerr << "[ERROR] GENERAL KERNELXx6 NOT IMPLEMENTED YET\n";
     } // TODO
+
+    inline void CCKernelXxY(size_t HorizontalCord, size_t VerticalCord, size_t Dim2Off, size_t HorKernelSize){
+        std::cerr << "[ERROR] GENERAL KERNELXxY NOT IMPLEMENTED YET\n";
+    }
+
+    inline void CCInnerParts(size_t VerOut, size_t HorOut, size_t Dim2Outer){
+        std::cerr << "[ERROR] GENERAL INNER PARTS NOT IMPLEMENTED YET\n";
+    }
+
 };
 
 //--------------------------------------
@@ -62,7 +75,13 @@ private:
 #if defined(__AVX__) && defined(__FMA__)
 
 template<>
-void GPMM<double>::CCKernel8x6(size_t HorizontalCord, size_t VerticalCord, size_t Dim2Off);
+inline void GPMM<double>::CCKernelXx6(size_t HorizontalCord, size_t VerticalCord, size_t Dim2Off);
+
+template<>
+inline void GPMM<double>::CCKernelXxY(size_t HorizontalCord, size_t VerticalCord, size_t Dim2Off, size_t HorKernelSize);
+
+template<>
+inline void GPMM<double>::CCInnerParts(size_t VerOut, size_t HorOut, size_t Dim2Outer);
 
 template<>
 void GPMM<double>::CCPerform();

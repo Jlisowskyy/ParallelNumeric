@@ -20,7 +20,7 @@ template<typename NumType>
 class Matrix1 : public Vector<NumType>
 {
 	//FixedSize - not expandable
-	static const unsigned ElementsPerCacheLine = CACHE_LINE / sizeof(NumType);
+	static constexpr unsigned ElementsPerCacheLine = CACHE_LINE / sizeof(NumType);
 
 	unsigned Rows, Cols; 
 	// Contains only information about matrix size
@@ -336,11 +336,12 @@ void Matrix1<NumType>::OptimizeResourceManagement(NumType *InitVal)
 // Find optimal way to store the data, then prepares
 // Arrays to be used efficiently, needs variable Rows and Cols to operate
 {
-    unsigned long PerCacheLine = CACHE_LINE / sizeof(NumType);
-    unsigned long ElementsOnLastCacheLine = ElementsPerLine % PerCacheLine;
-    OffsetPerLine = ElementsOnLastCacheLine == 0 ? 0 : (unsigned) (PerCacheLine - ElementsOnLastCacheLine);
+    unsigned long ElementsOnLastCacheLine = ElementsPerLine % ElementsPerCacheLine;
+    OffsetPerLine = ElementsOnLastCacheLine == 0 ? 0 : (unsigned) (ElementsPerCacheLine - ElementsOnLastCacheLine);
     SizeOfLine = ElementsPerLine + OffsetPerLine;
     unsigned long ExpectedAlignedSize = Lines * SizeOfLine;
+
+#ifdef OPTIMISE_MEM_
     unsigned long MemoryEnlargementInBytes = OffsetPerLine * Lines * (unsigned long)sizeof(NumType);
 
     if (MemoryEnlargementInBytes > (GB / 4) && (double)ExpectedAlignedSize > 1.2 * (double)MatrixSize )
@@ -358,6 +359,7 @@ void Matrix1<NumType>::OptimizeResourceManagement(NumType *InitVal)
 
         return;
     }
+#endif
 
     // Standard data storing with aligned every line of matrix
     *((Vector<NumType>*)this) = InitVal == nullptr ?
