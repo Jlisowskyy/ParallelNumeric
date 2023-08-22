@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <cmath>
 #include <iostream>
+#include <cstring>
 
 #include "../Operations/NumericalCore.hpp"
 #include "../Maintenance/ErrorCodes.hpp"
@@ -299,7 +300,7 @@ void Vector<NumType>::DeallocateArray() {
         //TODO
     }
     else {
-        _aligned_free(Array);
+        free(Array);
     }
 }
 
@@ -309,7 +310,7 @@ void Vector<NumType>::AllocateArray() {
         //TODO
     }
     else {
-        Array = (NumType*)_aligned_malloc(Size * sizeof(NumType), ALIGN);
+        Array = (NumType*)aligned_alloc(ALIGN, Size * sizeof(NumType));
         AbandonIfNull(Array);
     }
 }

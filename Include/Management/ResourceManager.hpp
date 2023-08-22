@@ -8,7 +8,7 @@
 #include <exception>
 #include <cmath>
 
-#include "..\Wrappers\ParallelNumeric.hpp"
+#include "../Wrappers/ParallelNumeric.hpp"
 
 template<unsigned ThreadCap = MaxCPUThreads>
 inline unsigned LogarithmicThreads(unsigned long long);

@@ -44,13 +44,6 @@ constexpr unsigned long GB = 1024 * 1024 * 1024;
 #ifdef OpSysUNIX_
 
 #include <sys/ioctl.h> 
-    
-int FindConsoleWidth() {
-    winsize buff;
-    ioctl(STDOUT_FILENO, TIOCGWINSZ, &buff);
-
-    return buff.ws_col;
-}
 
 #elif defined OpSysWIN_
 
