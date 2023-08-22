@@ -48,9 +48,16 @@ int main() {
 
 #elif defined DebugMatrix1
 
-const unsigned dim = 4096;
+const unsigned dim = 8160;
 
 int main() {
+//    Mat M1(dim, dim, (double)6);
+//    Mat M2(dim, dim, (double)1);
+//
+//    auto M3 = M1 * M2;
+//
+//    std::cout << M3;
+
     PerformTest<double, [](unsigned long long) -> DPack { return {dim,dim,dim}; } >(1e+9, 1, 15060);
 }
 

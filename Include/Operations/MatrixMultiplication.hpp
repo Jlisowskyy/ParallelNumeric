@@ -10,19 +10,13 @@
 #include <queue>
 #include <mutex>
 #include <latch>
+#include <atomic>
 
 using cun = const unsigned;
-using ul = unsigned long;
-using cul = const unsigned long;
-using ull = unsigned long long;
 using cull = const unsigned long long;
 
 struct P3D{
     size_t x,y,z;
-};
-
-struct P2D{
-    size_t x,y;
 };
 
 template<typename NumType>
@@ -50,13 +44,13 @@ class GPMM
         //
         //  Possible combinations of horizontalness (respectively matrices: ABC):
         //  CCC, CRC, CRR, RCC, RCR, RRR
-        //  Combinations CCR and RRC are not possible to run with AVX so are incredibly slowy in comparison
+        //  Combinations CCR and RRC are not possible to run with AVX, so they are incredibly slowly in comparison
 {
     // Chosen blocking parameters for specific cpu attributes
-    static constexpr size_t Dim1Part = 12240;
-    static constexpr size_t Dim2Part = 240;
-    static constexpr size_t Dim3Part = 1020;
-    static constexpr size_t HorInBlockSize = 6;
+    static constexpr size_t Dim1Part = 12240; // Size chosen for double to optimize for L3 cache
+    static constexpr size_t Dim2Part = 240; // Size chosen for double to optimize for L1 cache
+    static constexpr size_t Dim3Part = 1020; // Size chosen for double to optimize for L2 cache
+    static constexpr size_t HorInBlockSize = 6; // Same for all data types, because depends only on length of cache line
 
     // Matrices parameters
     const NumType* const MatA;
@@ -65,9 +59,9 @@ class GPMM
     size_t Dim1, Dim2, Dim3;
     size_t MatASoL, MatBSoL, MatCSoL; // Size of single line necessary, caused by applied alignment
 
-
     // Thread Coordination
-    bool WorkDone = false;
+    std::atomic<bool> WorkDone = false;
+    std::atomic<bool> LineDone = false;
     std::queue<P3D> CordQue;
     std::mutex QueGuard;
     std::unique_ptr<std::latch> StartGuard;
