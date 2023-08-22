@@ -2,7 +2,6 @@
 // Author: Jakub Lisowski
 
 #include <cmath>
-#include <windows.h>
 
 #include "Include/Maintenance/Debuggers.hpp"
 #include "Include/Maintenance/MatricesTests.hpp"
@@ -49,10 +48,10 @@ int main() {
 
 #elif defined DebugMatrix1
 
-const unsigned dim = 1020;
+const unsigned dim = 4096;
 
 int main() {
-    PerformTest(1e+9, 100, 69, true);
+    PerformTest<double, [](unsigned long long) -> DPack { return {dim,dim,dim}; } >(1e+9, 1, 15060);
 }
 
 // BEFORE BLOCKING UPDATE: 5.5 on dim dim dim, where dim = 4096

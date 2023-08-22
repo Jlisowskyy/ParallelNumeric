@@ -297,18 +297,19 @@ public:
 private:
     template<typename NumT>
     friend inline GPMM<NumT> GetMultMachine(const Matrix1<NumT>& A, const Matrix1<NumT>& B, const Matrix1<NumT>& C){
-        return GPMM<NumType>(A.Array, B.Array, C.Array, A.Rows, A.Cols, B.Cols, A.SizeOfLine, B.SizeOfLine, C.SizeOfLine);
+        return GPMM<NumType>(A.Array, B.Array, C.Array, A.Rows, A.Cols, B.Cols, A.SizeOfLine, B.SizeOfLine, C.SizeOfLine,
+                             A.IsHorizontal, B.IsHorizontal, C.IsHorizontal);
     }
 
 public:
-    template<unsigned ThreadCap = 8, unsigned (*Decider)(unsigned long long) = LogarithmicThreads<ThreadCap>>
+    template<unsigned ThreadCap = 20, unsigned (*Decider)(unsigned long long) = LogarithmicThreads<ThreadCap>>
 	friend Matrix1 operator*(const Matrix1& A, const Matrix1& B){
         if (A.Cols != B.Rows)
             throw std::runtime_error("Not able to perform matrix multiplication - wrong matrix sizes\n");
 
         Matrix1 RetVal(A.Rows, B.Cols, (NumType)0);
         GPMM<NumType> MultMachine = GetMultMachine(A,B,RetVal);
-        MultMachine.CCPerform();
+        MultMachine.ExecuteOperation();
 
         return RetVal;
     }

@@ -137,7 +137,7 @@ public:
 
 template<unsigned ThreadCap>
 unsigned LogarithmicThreads(const unsigned long long int Elements) {
-    auto Ret = (unsigned)(log2((double) (Elements / ThreadedStartingThreshold) )) + 1u;
+    auto Ret = (unsigned)(log2((double) (Elements / ThreadedStartingThreshold) ) + 1);
     return std::min(ThreadCap, Ret);
 }
 
