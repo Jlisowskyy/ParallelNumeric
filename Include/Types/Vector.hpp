@@ -8,6 +8,9 @@
 #include <cmath>
 #include <iostream>
 #include <cstring>
+#include <omp.h>
+#include <immintrin.h>
+#include <functional>
 
 #include "../Operations/NumericalCore.hpp"
 #include "../Maintenance/ErrorCodes.hpp"
@@ -28,6 +31,7 @@ class Vector
 #endif
 {
 protected:
+    static constexpr unsigned ElementsPerCacheLine = CACHE_LINE / sizeof(NumType);
     unsigned long Size;
 	bool IsHorizontal;
 	const ResourceManager* MM;
@@ -105,10 +109,14 @@ public:
 		}
 	}
 
+    ~Vector(){
+        DeallocateArray();
+    }
+
 	Vector& operator=(const Vector& x);
 	Vector& operator=(Vector&& x) noexcept;
-	[[nodiscard]] inline unsigned long GetSize() const { return Size; }
-	[[nodiscard]] inline bool GetHorizontalness() const { return IsHorizontal; }
+    inline unsigned long GetSize() const { return Size; }
+	inline bool GetIsHorizontal() const { return IsHorizontal; }
 	inline NumType* GetArray() const { return Array; }
 	inline NumType* GetArray() { return Array; }
 	inline void ChangePosition() { IsHorizontal = !IsHorizontal; }
@@ -133,72 +141,91 @@ public:
 		return out;
 	}
 
-	// On-data operations
+    template<NumType(*UnaryOperation)(NumType)>
+    inline void ApplyOnDataEffect()
+        // Transforms data using templated function
+    {
+        #pragma omp parallel for
+        for (size_t i = 0; i < Size; ++i) {
+            Array[i] = UnaryOperation(Array[i]);
+        }
+    }
 
+#if defined(__AVX__) || defined(__AVX2__)
+    template<typename AVXType, AVXType (AVXOperation)(AVXType), NumType(*UnCleaningOperation)(NumType)>
+    inline void ApplyAVXOnDataEffect()
+        // Transforms data with avx function
+    {
+        static constexpr size_t PackageSize = AVX_SIZE / sizeof(NumType);
+        const size_t Range = (Size / ElementsPerCacheLine) * ElementsPerCacheLine;
+
+        #pragma omp parallel for
+        for (size_t i = 0; i < Range; i+= ElementsPerCacheLine) {
+            *((AVXType*)(Array + i)) = AVXOperation(*((AVXType*)(Array + i)));
+            *((AVXType*)(Array + i + PackageSize)) = AVXOperation(*((AVXType*)(Array + i + PackageSize)));
+        }
+        for(size_t i = Range; i < Size; ++i){
+            Array[i] = UnCleaningOperation(Array[i]);
+        }
+    }
+#endif // __AVX__ __AVX2__
+
+
+	// On-data operations
 	void sqrt() {
-		//#pragma omp for
-		for (long i = 0; i < Size; ++i)
-			Array[i] = std::sqrt(Array[i]);
+        ApplyOnDataEffect<std::sqrt>();
 	}
 
+    void reciprocal(){
+        auto operand = [](NumType x) -> NumType{ return 1 / x; };
+        ApplyOnDataEffect<operand>();
+    }
+
+    void rsqrt(){
+        auto operand = [](NumType x) -> NumType{ return 1 / std::sqrt(x); };
+        ApplyOnDataEffect<operand>();
+    }
+
 	void exp() {
-		//#pragma omp for
-		for (long i = 0; i < Size; ++i)
-			Array[i] = std::exp(Array[i]);
+        ApplyOnDataEffect<std::exp>();
 	}
 
 	void exp2() {
-		//#pragma omp for
-		for (long i = 0; i < Size; ++i)
-			Array[i] = std::exp2(Array[i]);
+        ApplyOnDataEffect<std::exp2>();
 	}
 
 	void sin() {
-		//#pragma omp for
-		for (long i = 0; i < Size; ++i)
-			Array[i] = std::sin(Array[i]);
+        ApplyOnDataEffect<std::sin>();
 	}
 
 	void cos() {
-		//#pragma omp for
-		for (long i = 0; i < Size; ++i)
-			Array[i] = std::cos(Array[i]);
+        ApplyOnDataEffect<std::cos>();
 	}
 
 	void tan() {
-		//#pragma omp for
-		for (long i = 0; i < Size; ++i)
-			Array[i] = std::tan(Array[i]);
+        ApplyOnDataEffect<std::tan>();
 	}
 
 	void sinh() {
-		//#pragma omp for
-		for (long i = 0; i < Size; ++i)
-			Array[i] = std::sinh(Array[i]);
+        ApplyOnDataEffect<std::sinh>();
 	}
 
 	void cosh() {
-		//#pragma omp for
-		for (long i = 0; i < Size; ++i)
-			Array[i] = std::cosh(Array[i]);
+        ApplyOnDataEffect<std::cosh>();
 	}
 
 	void tanh() {
-		//#pragma omp for
-		for (long i = 0; i < Size; ++i)
-			Array[i] = std::tanh(Array[i]);
+        ApplyOnDataEffect<std::tanh>();
 	}
 
     void cot() {
-        //#pragma omp for
-        for (long i = 0; i < Size; ++i)
-            Array[i] = 1 / std::tan(Array[i]);
+        auto operand = [](NumType x) -> NumType { return 1 / std::tan(x); };
+        ApplyOnDataEffect<operand>();
     }
 
 	void coth() {
-		//#pragma omp for
-		for (long i = 0; i < Size; ++i)
-			Array[i] = 1 / std::tanh(Array[i]);
+        auto operand = [](NumType x) -> NumType { return 1 / std::tanh(x); };
+        ApplyOnDataEffect<std::exp>();
 	}
 
 	Vector GetModified(void (Vector::*func)()) const {
@@ -209,11 +236,7 @@ public:
 
 	Vector GetModified(NumType(*func)(NumType x)) const {
 		Vector RetVal = *this;
-
-		NumType* Dst = RetVal.Array;
-		for (unsigned long i = 0; i < Size; ++i) {
-			Dst[i] = func(Dst[i]);
-		}
+        ApplyOnDataEffect<func>();
 
 		return RetVal;
 	}
@@ -224,30 +247,41 @@ private:
 public:
 	// Vector and Vector operations
 
-    template<typename NumType2, unsigned ThreadCap = 8, unsigned (*Decider)(unsigned long long) = LinearThreads<ThreadCap>>
-    friend NumType2 operator*(const Vector<NumType2>& a, const Vector<NumType2>& b){
-        if (a.GetHorizontalness() && !b.GetHorizontalness()) {
+    template<unsigned ThreadCap = 8, unsigned (*Decider)(unsigned long long) = LinearThreads<ThreadCap>>
+    friend NumType operator*(const Vector<NumType>& a, const Vector<NumType>& b){
+        if (a.GetIsHorizontal() && !b.GetIsHorizontal()) {
 
             if (a.GetSize() != b.GetSize()) {
-#ifdef _MSC_VER
-                throw std::exception("Vectors are not the same length");
-#else
-                throw std::exception();
-#endif
+                throw std::runtime_error("Vectors are not the same length\n");
             }
 
             return DotProduct<NumType, ThreadCap, Decider>(a,b);
         }
         else {
-#ifdef _MSC_VER
-            throw std::exception("Not matching dimension to perform dot product or they are not the same length");
-#else
-            throw std::exception();
-#endif
+            throw std::runtime_error("Not matching dimension to perform dot product or they are not the same length\n");
         }
     }
 
 };
+
+//-----------------------------------------
+// High perf AVX spec
+//-----------------------------------------
+
+#ifdef __AVX__
+
+template<>
+void Vector<double>::sqrt();
+template<>
+void Vector<float>::sqrt();
+template<>
+void Vector<float>::reciprocal();
+
+#endif // __AVX__
+
+//-----------------------------------------
+// Template implementation
+//-----------------------------------------
 
 #ifdef DEBUG_
 
@@ -300,7 +334,11 @@ void Vector<NumType>::DeallocateArray() {
         //TODO
     }
     else {
+#ifdef OpSysWIN_
+        _aligned_free(Array);
+#elif defined OpSysUNIX_
         free(Array);
+#endif
     }
 }
 
@@ -310,9 +348,20 @@ void Vector<NumType>::AllocateArray() {
         //TODO
     }
     else {
-        Array = (NumType*)aligned_alloc(ALIGN, Size * sizeof(NumType));
+        short tries = 5;
+        Array = nullptr; // <------- Temp
+        while(Array == nullptr && tries--){
+#ifdef OpSysWIN_
+            Array = (NumType*)_aligned_malloc(Size * sizeof(NumType), ALIGN);
+#elif defined OpSysUNIX_
+            Array = (NumType*)aligned_alloc(ALIGN, Size * sizeof(NumType));
+#endif
+            if (Array == nullptr) Sleep(10);
+        }
+
         AbandonIfNull(Array);
     }
+
 }
 
 template<typename NumType>

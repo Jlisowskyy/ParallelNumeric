@@ -40,12 +40,12 @@ void MatrixSumHelperAlignedArrays(float *Target, const float *const Input1, cons
     const auto VectInput2 = (const __m256*)Input2;
     auto VectTarget = (__m256*)Target;
 
-    const unsigned long VectSize = Elements / FLOAT_VECTOR_LENGTH;
+    const unsigned long VectSize = Elements / SINGLE_VECTOR_LENGTH;
     for (unsigned long i = 0; i < VectSize; ++i) {
         VectTarget[i] = _mm256_add_ps(VectInput1[i], VectInput2[i]);
     }
 
-    for (unsigned long i = VectSize * FLOAT_VECTOR_LENGTH; i < Elements; ++i) {
+    for (unsigned long i = VectSize * SINGLE_VECTOR_LENGTH; i < Elements; ++i) {
         Target[i] = Input1[i] + Input2[i];
     }
 }
@@ -98,8 +98,8 @@ DotProductMachineChunked<double>::DotProductMachineChunked(const double* const S
 
 template<>
 DotProductMachineChunked<float>::DotProductMachineChunked(const float* const Src1, const float* const Src2, const unsigned Threads, const unsigned long Range) :
-        DPMCore<float>(Src1, Src2, Threads, Range, (Range / (Threads * FLOAT_VECTOR_LENGTH)) * Threads * FLOAT_VECTOR_LENGTH),
-        ElemPerThread{ Range / (Threads * FLOAT_VECTOR_LENGTH) }
+        DPMCore<float>(Src1, Src2, Threads, Range, (Range / (Threads * SINGLE_VECTOR_LENGTH)) * Threads * SINGLE_VECTOR_LENGTH),
+        ElemPerThread{ Range / (Threads * SINGLE_VECTOR_LENGTH) }
 {}
 
 
@@ -149,7 +149,7 @@ DotProductMachineComb<double>::DotProductMachineComb(const double* const Src1, c
 
 template<>
 DotProductMachineComb<float>::DotProductMachineComb(const float* const Src1, const float* const Src2, const unsigned Threads, const unsigned long Range) :
-        DPMCore<float>(Src1, Src2, Threads, Range, (((Range / FLOAT_VECTOR_LENGTH)* FLOAT_VECTOR_LENGTH) / PER_CIRCLE_FLOAT)* PER_CIRCLE_FLOAT), LoopRange{ Range / FLOAT_VECTOR_LENGTH },
+        DPMCore<float>(Src1, Src2, Threads, Range, (((Range / SINGLE_VECTOR_LENGTH) * SINGLE_VECTOR_LENGTH) / PER_CIRCLE_FLOAT) * PER_CIRCLE_FLOAT), LoopRange{Range / SINGLE_VECTOR_LENGTH },
         PerCircle{ PER_CIRCLE_FLOAT }
 {}
 

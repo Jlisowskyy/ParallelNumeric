@@ -1,8 +1,6 @@
 *.exe
-cmake-build-debug/
-cmake-build-release-clang/
-cmake-build-debug-clang/
-cmake-build-reldeb-clang/
-cmake-build-release-gcc/
-.idea/*
-/temp/*
+/**/*
+!/Src/
+!/Include/
+!/Docs/
+

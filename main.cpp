@@ -4,7 +4,7 @@
 #include <cmath>
 
 #include "Include/Maintenance/Debuggers.hpp"
-#include "Include/Maintenance/MatricesTests.hpp"
+#include "Include/Maintenance/PerfTests.hpp"
 #include "Include/Wrappers/OptimalOperations.hpp"
 
 //#define DebugSumProd
@@ -34,16 +34,11 @@ int main(){
 
 
 using typior = double;
+size_t length;
 
 int main() {
-    unsigned size = 16384;
-    Vector<typior> V1(size, (typior)4, false);
-    Vector<typior> V2(size, (typior)1);
-    Timer T1;
-
-    Matrix1<typior> result = OuterProduct(V1, V2);
-
-    //std::cout << result;
+    Vect V1(length,(typior)1);
+    Vect V2(length,(typior)6);
 }
 
 #elif defined DebugMatrix1
@@ -51,14 +46,15 @@ int main() {
 const unsigned dim = 8160;
 
 int main() {
-//    Mat M1(dim, dim, (double)6);
+//    Mat M1(dim, dim, (double)0);
 //    Mat M2(dim, dim, (double)1);
-//
+
+//    Timer T1;
 //    auto M3 = M1 * M2;
-//
+//    T1.Stop();
 //    std::cout << M3;
 
-    PerformTest<double, [](unsigned long long) -> DPack { return {dim,dim,dim}; } >(1e+9, 1, 15060);
+    PerformMMTest<double, [](unsigned long long) -> DPack { return {dim,dim,dim}; } >(1e+9, 5, 15060);
 }
 
 // BEFORE BLOCKING UPDATE: 5.5 on dim dim dim, where dim = 4096

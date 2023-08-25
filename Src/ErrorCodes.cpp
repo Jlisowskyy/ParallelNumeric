@@ -5,10 +5,11 @@
 
 void AbandonIfNull(void* ptr){
     if (ptr == nullptr) {
-#ifdef DEBUG_
-        std::cerr << "[ERROR] Returned pointer was null!";
-#endif
-        exit(0xfa);
+//#ifdef DEBUG_
+//        std::cerr << "[ERROR] Returned pointer was null!";
+//#endif
+//        exit(0xfa);
+        throw std::runtime_error("[ERROR] Returned pointer was null!\n");
     }
 }
 

@@ -5,15 +5,14 @@
 #ifndef PARALLELNUM_MATRIXMULTIPLICATION_HPP
 #define PARALLELNUM_MATRIXMULTIPLICATION_HPP
 
-#include "../Management/ResourceManager.hpp"
 #include <iostream>
 #include <queue>
 #include <mutex>
 #include <latch>
 #include <atomic>
 
-using cun = const unsigned;
-using cull = const unsigned long long;
+#include "../Management/ResourceManager.hpp"
+#include "../Maintenance/ErrorCodes.hpp"
 
 struct P3D{
     size_t x,y,z;
@@ -61,7 +60,6 @@ class GPMM
 
     // Thread Coordination
     std::atomic<bool> WorkDone = false;
-    std::atomic<bool> LineDone = false;
     std::queue<P3D> CordQue;
     std::mutex QueGuard;
     std::unique_ptr<std::latch> StartGuard;

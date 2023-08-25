@@ -21,7 +21,7 @@ add_executable(ParallelNumeric
         Include/Maintenance/Debuggers.hpp
         Include/Maintenance/Debuggers.hpp
         Include/Maintenance/ErrorCodes.hpp
-        Include/Maintenance/MatricesTests.hpp
+        Include/Maintenance/PerfTests.hpp
         Include/Management/ResourceManager.hpp
         Include/Operations/MatrixAndVectorOperations.hpp
         Include/Operations/NumericalAlgorithms.hpp
@@ -42,6 +42,7 @@ add_executable(ParallelNumeric
         Src/MatrixMultiplicationSolutions.cpp
         Include/Operations/MatrixMultiplication.hpp
         Src/MatrixMultiplication.cpp
+        Src/Vector.cpp
 )
 
 find_package(OpenMP)
@@ -50,7 +51,7 @@ if(OpenMP_CXX_FOUND)
 endif()
 
 #target_compile_options(ParallelNumeric PUBLIC "$<${gcc_flag}: -fopenmp;>" "$<${clang_flag}: -fopenmp=libomp;>")
-target_compile_options(ParallelNumeric PUBLIC -Wall;-Wextra;-Wformat=2;-Wunused;-mavx;-mavx2;-mfma;-O3;-fopenmp)
+target_compile_options(ParallelNumeric PUBLIC -Wall;-Wextra;-Wformat=2;-Wunused;-mavx;-mavx2;-mfma;-fopenmp;-O3;)
 
 # dodaj zeby podczas kompilacji nie includowalo
 

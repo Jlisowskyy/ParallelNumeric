@@ -11,9 +11,11 @@ template<>
 inline void GPMM<double>::CCKernelXx6(const size_t HorizontalCord, const size_t VerticalCord, const size_t Dim2Off)
 #define VectPartUpperPtr MatA + kk * MatASoL + VerticalCord
 #define VectPartLowerPtr MatA + kk * MatASoL + VerticalCord + 4
-#define LoadVectCoef(shift) MatB[HorizontalCord * MatBSoL + shift + kk]
+#define VectCoefPtr(shift) MatB + (HorizontalCord + shift) * MatBSoL + kk
+#define LoadVectCoef(shift) MatB[(HorizontalCord + shift) * MatBSoL + kk]
 #define OnTargetVectUpper(shift) *((__m256d*) (MatC + (HorizontalCord + shift) * MatCSoL + VerticalCord))
 #define OnTargetVectLower(shift) *((__m256d*) (MatC + (HorizontalCord + shift) * MatCSoL + VerticalCord + 4))
+
 // Actual mathematical kernel used to perform all calculations
 // Every single iteration it loads one single cache line,
 // containing 8 doubles (8x64 = 512(cache line length) = 2 * 256(avx register length)),
@@ -52,43 +54,64 @@ inline void GPMM<double>::CCKernelXx6(const size_t HorizontalCord, const size_t 
     __m256d ResVectBuffLower4  = _mm256_setzero_pd();
     __m256d ResVectBuffLower5  = _mm256_setzero_pd();
 
-    const size_t LoopRange = min(Dim2, Dim2Off + Dim2Part);
+    const double* VectCoef0 = MatB + HorizontalCord * MatBSoL + Dim2Off;
+    const double* VectCoef1 = VectCoef0 + MatBSoL;
+    const double* VectCoef2 = VectCoef1 + MatBSoL;
+    const double* VectCoef3 = VectCoef2 + MatBSoL;
+    const double* VectCoef4 = VectCoef3 + MatBSoL;
+    const double* VectCoef5 = VectCoef4 + MatBSoL;
+
+    constexpr size_t LoopRange = 240; //min(Dim2, Dim2Off + Dim2Part);
 
     for(size_t kk = Dim2Off; kk < LoopRange; ++kk){
+        const double* UPtr = VectPartUpperPtr;
+        const double* LPtr = VectPartLowerPtr;
+        const double* CoefPtr = VectCoefPtr(0);
+
+        VectPartBuffUpper = _mm256_load_pd(UPtr);
+        VectPartBuffLower = _mm256_load_pd(LPtr);
+
+
 #ifndef __clang__
-        __builtin_prefetch(VectPartUpperPtr + MatASoL);
-        __builtin_prefetch(VectPartLowerPtr + MatASoL);
+        __builtin_prefetch(UPtr + MatASoL);
+        __builtin_prefetch(LPtr + MatASoL);
 #else
         // TODO: make research about those instructions
-        //_mm_prefetch()
+        _mm_prefetch(UPtr + MatASoL, 1);
+        _mm_prefetch(LPtr + MatASoL, 0);
 #endif
-        VectPartBuffUpper = _mm256_load_pd(VectPartUpperPtr);
-        VectPartBuffLower = _mm256_load_pd(VectPartLowerPtr);
-
-        VectCoefBuff0 = _mm256_set1_pd(LoadVectCoef(0));
-        VectCoefBuff1 = _mm256_set1_pd(LoadVectCoef(1));
+        VectCoefBuff0 = _mm256_set1_pd(*(VectCoef0));
+        VectCoefBuff1 = _mm256_set1_pd(*(VectCoef1));
 
         ResVectBuffUpper0 = _mm256_fmadd_pd(VectPartBuffUpper, VectCoefBuff0, ResVectBuffUpper0);
         ResVectBuffLower0 = _mm256_fmadd_pd(VectPartBuffLower, VectCoefBuff0, ResVectBuffLower0);
         ResVectBuffUpper1 = _mm256_fmadd_pd(VectPartBuffUpper, VectCoefBuff1, ResVectBuffUpper1);
         ResVectBuffLower1 = _mm256_fmadd_pd(VectPartBuffLower, VectCoefBuff1, ResVectBuffLower1);
 
-        VectCoefBuff0 = _mm256_set1_pd(LoadVectCoef(2));
-        VectCoefBuff1 = _mm256_set1_pd(LoadVectCoef(3));
+        VectCoefBuff0 = _mm256_set1_pd(*(VectCoef2));
+        VectCoefBuff1 = _mm256_set1_pd(*(VectCoef3));
 
         ResVectBuffUpper2 = _mm256_fmadd_pd(VectPartBuffUpper, VectCoefBuff0, ResVectBuffUpper2);
         ResVectBuffLower2 = _mm256_fmadd_pd(VectPartBuffLower, VectCoefBuff0, ResVectBuffLower2);
         ResVectBuffUpper3 = _mm256_fmadd_pd(VectPartBuffUpper, VectCoefBuff1, ResVectBuffUpper3);
         ResVectBuffLower3 = _mm256_fmadd_pd(VectPartBuffLower, VectCoefBuff1, ResVectBuffLower3);
 
-        VectCoefBuff0 = _mm256_set1_pd(LoadVectCoef(4));
-        VectCoefBuff1 = _mm256_set1_pd(LoadVectCoef(5));
+        VectCoefBuff0 = _mm256_set1_pd(*(VectCoef4));
+        VectCoefBuff1 = _mm256_set1_pd(*(VectCoef5));
 
         ResVectBuffUpper4 = _mm256_fmadd_pd(VectPartBuffUpper, VectCoefBuff0, ResVectBuffUpper4);
         ResVectBuffLower4 = _mm256_fmadd_pd(VectPartBuffLower, VectCoefBuff0, ResVectBuffLower4);
         ResVectBuffUpper5 = _mm256_fmadd_pd(VectPartBuffUpper, VectCoefBuff1, ResVectBuffUpper5);
         ResVectBuffLower5 = _mm256_fmadd_pd(VectPartBuffLower, VectCoefBuff1, ResVectBuffLower5);
+
+        ++VectCoef0;
+        ++VectCoef1;
+        ++VectCoef2;
+        ++VectCoef3;
+        ++VectCoef4;
+        ++VectCoef5;
     }
+
     OnTargetVectUpper(0) += ResVectBuffUpper0;
     OnTargetVectLower(0) += ResVectBuffLower0;
     OnTargetVectUpper(1) += ResVectBuffUpper1;
@@ -214,7 +237,7 @@ void GPMM<double>::CCPerform(unsigned ThreadCount)
         }
     }
     else{
-        StartGuard = std::make_unique<std::latch>(ThreadCount + 1);
+        StartGuard = std::make_unique<std::latch>(ThreadCount);
 
         ThreadPackage& Threads = ResourceManager::GetThreads();
         for(unsigned i = 0; i < ThreadCount; ++i){
@@ -222,7 +245,6 @@ void GPMM<double>::CCPerform(unsigned ThreadCount)
         }
 
         // Loops adds coordinates to queue, from which working threads reads locations to execute kernel
-        unsigned SetupIterations = ThreadCount;
         for (size_t VerOut = 0; VerOut < Dim1; VerOut += Dim1Part){
             for(size_t Dim2Outer = 0; Dim2Outer < Dim2; Dim2Outer += Dim2Part){
                 while(!CordQue.empty())
@@ -237,16 +259,9 @@ void GPMM<double>::CCPerform(unsigned ThreadCount)
                     const size_t VerInRange = min(VerOut + Dim1Part, Dim1);
 
                     for(size_t VerIn = VerOut; VerIn < VerInRange; VerIn += VerInBlockSize){
-                        if (SetupIterations--){
-                            CordQue.push({VerIn, HorOut, Dim2Outer});
-
-                            if (!SetupIterations) StartGuard->arrive_and_wait();
-                        }
-                        else{
-                            QueGuard.lock();
-                            CordQue.push({VerIn, HorOut, Dim2Outer});
-                            QueGuard.unlock();
-                        }
+                        QueGuard.lock();
+                        CordQue.push({VerIn, HorOut, Dim2Outer});
+                        QueGuard.unlock();
                     }
                 }
             }

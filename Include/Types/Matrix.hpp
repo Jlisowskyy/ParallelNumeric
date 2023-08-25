@@ -17,10 +17,15 @@
 #include "../Operations/MatrixMultiplication.hpp"
 
 template<typename NumType>
+class Matrix1;
+
+
+
+template<typename NumType>
 class Matrix1 : public Vector<NumType>
 {
 	//FixedSize - not expandable
-	static constexpr unsigned ElementsPerCacheLine = CACHE_LINE / sizeof(NumType);
+
 
 	unsigned Rows, Cols; 
 	// Contains only information about matrix size
@@ -42,7 +47,7 @@ class Matrix1 : public Vector<NumType>
 
 	using Vector<NumType>::Array;
 	using Vector<NumType>::IsHorizontal;
-
+    using Vector<NumType>::ElementsPerCacheLine;
 	using Vector<NumType>::MM;
 	// Probably used in future to synchronize resource management
 
@@ -313,23 +318,6 @@ public:
 
         return RetVal;
     }
-
-	Matrix1 GetModified(void (Vector<NumType>::* func)()) {
-		Matrix1 RetVal = *this;
-		RetVal.*func();
-		return RetVal;
-	}
-
-	Matrix1 GetModified(NumType(*func)(NumType x)) {
-		Matrix1 RetVal = *this;
-
-		NumType* Dst = RetVal.Array;
-		for (unsigned long i = 0; i < Size; ++i) {
-			Dst[i] = func(Dst[i]);
-		}
-
-		return RetVal;
-	}
 };
 
 template<typename NumType>

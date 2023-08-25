@@ -9,8 +9,8 @@
 
 #include "../Wrappers/OptimalOperations.hpp"
 
-unsigned long long GenerateNumber(unsigned long long MinVal, unsigned long long MaxVal) {
-    return  (unsigned long long)((3 * (double)rand() / (double)RAND_MAX) * (double)(MaxVal - MinVal)) + MinVal;
+size_t GenerateNumber(size_t MinVal, size_t MaxVal) {
+    return  (size_t)((3 * (double)rand() / (double)RAND_MAX) * (double)(MaxVal - MinVal)) + MinVal;
 }
 
 struct DPack
@@ -19,7 +19,7 @@ struct DPack
     unsigned dim1, dim2, dim3;
 };
 
-DPack GenDims(unsigned long long OpCount){
+DPack GenDims(size_t OpCount){
     unsigned dim1 = GenerateNumber(4, std::cbrt(OpCount));
     unsigned dim2 = GenerateNumber(2, std::sqrt(OpCount / dim1));
     unsigned dim3 = OpCount / (dim1 * dim2);
@@ -27,8 +27,8 @@ DPack GenDims(unsigned long long OpCount){
     return {dim1, dim2, dim3};
 }
 
-template <typename NumType = double , DPack(*GetDims)(unsigned long long) = GenDims>
-bool PerformTest(unsigned long long OperationCount, unsigned RunsToDo, long Seed = 0, bool Verbose = false) {
+template <typename NumType = double , DPack(*GetDims)(size_t) = GenDims>
+bool PerformMMTest(size_t OperationCount, unsigned RunsToDo, long Seed = 0, bool Verbose = false) {
 
     unsigned SuccessfulRuns = 0;
     long long ShortestRun, LongestRun, LastRun;
@@ -82,11 +82,24 @@ bool PerformTest(unsigned long long OperationCount, unsigned RunsToDo, long Seed
     return SuccessfulRuns == RunsToDo;
 }
 
+template<typename NumType, void(Vector<NumType>::*UnaryOperand)()>
+void PerformVectOnDataTest(size_t VectorSize, size_t RunsToDo){
+    Timer T1("Every Run Counter", false);
+    T1.CalculateAverageTime(RunsToDo, true);
+    Vector<NumType> V1(VectorSize, (NumType)100);
+
+    while(RunsToDo--){
+        T1.Start();
+        (V1.*UnaryOperand)();
+        T1.Stop();
+    }
+}
+
 void PerformMajorTests(unsigned RunsToDo) {
     unsigned CorrectRuns = 0;
 
     while (RunsToDo--) {
-        if (PerformTest<double>(1000000000ull, 100, 0)) {
+        if (PerformMMTest<double>(1000000000ull, 100, 0)) {
             ++CorrectRuns;
         }
     }

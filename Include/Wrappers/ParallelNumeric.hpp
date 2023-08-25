@@ -9,8 +9,8 @@
 #include <thread>
 #include <utility>
 
-#define DOUBLE_VECTOR_LENGTH (unsigned long)4
-#define FLOAT_VECTOR_LENGTH (unsigned long)8
+#define DOUBLE_VECTOR_LENGTH 4
+#define SINGLE_VECTOR_LENGTH 8
 #define BYTE_SIZE 8
 #define AVX_SIZE 256
 #define ALIGN 64
@@ -20,12 +20,16 @@
 #define DEBUG_
 //#define OPTIMISE_MEM_
 
+using cun = const unsigned;
+using cull = const unsigned long long;
+using ull = unsigned long long;
+
 const long long unsigned ThreadedStartingThreshold = 32768;
 const unsigned BasicThreadPool = 8;
 const unsigned MaxCPUThreads = 20;
 constexpr unsigned long GB = 1024 * 1024 * 1024;
 
-// Detecting system on compilation
+// Detecting the system on compilation
 #ifdef __unix
     #define OpSysUNIX_
 #elif defined __unix__
@@ -40,7 +44,7 @@ constexpr unsigned long GB = 1024 * 1024 * 1024;
     #define OpSysNONE_
 #endif
 
-// Correct including behaviour
+// Correct including behavior
 #ifdef OpSysUNIX_
 
 #include <sys/ioctl.h> 
