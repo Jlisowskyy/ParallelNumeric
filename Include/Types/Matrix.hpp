@@ -19,27 +19,30 @@
 template<typename NumType>
 class Matrix1;
 
+template<typename NumType, unsigned ThreadCap = 20, unsigned (*Decider)(unsigned long long) = LogarithmicThreads<ThreadCap>>
+inline Matrix1<NumType> GetOuterProduct(const Vector<NumType>& A, const Vector<NumType>& B, bool HorizontalReturn = false);
 
+template<typename NumT>
+inline OPM<NumT> GetOPM(const Vector<NumT>& A, const Vector<NumT>& B, Matrix1<NumT>& C, bool IsHor);
 
 template<typename NumType>
 class Matrix1 : public Vector<NumType>
 {
 	//FixedSize - not expandable
 
-
-	unsigned Rows, Cols; 
+	size_t Rows, Cols;
 	// Contains only information about matrix size
 
-	unsigned ElementsPerLine{}, Lines{};
+	size_t ElementsPerLine{}, Lines{};
 	// Contains only information about data storing and alignment
 
-	unsigned long MatrixSize; 
+	size_t MatrixSize;
 	// Store only data about mathematical matrix dimensions not actual on hw size
 
-	unsigned OffsetPerLine{};
+	size_t OffsetPerLine{};
 	// Contains information how many data cells in memory are shifted to ensure data line alignment
 
-	unsigned SizeOfLine{};
+	size_t SizeOfLine{};
 	// Contains information about actual hw size of each line different from ElementsPerLine by alignment
 	
 	bool IsMemoryPacked = false; 
@@ -55,8 +58,8 @@ class Matrix1 : public Vector<NumType>
 	// actual on hw size expressed by number of held NumType variables inside the array
 
 	using Vector<NumType>::CheckForIncorrectSize;
-	NumType& (Matrix1::* AccessFunc)(const unsigned&, const unsigned&);
-	const NumType& (Matrix1::* AccessFuncConst)(const unsigned&, const unsigned&) const;
+	NumType& (Matrix1::* AccessFunc)(size_t, size_t);
+	const NumType& (Matrix1::* AccessFuncConst)(size_t, size_t) const;
 
 	void AbandonIfVector() const {
 		if (Rows == 1 || Cols == 1) {
@@ -76,53 +79,53 @@ class Matrix1 : public Vector<NumType>
 	void SetupAccess();
 	void MoveFromPointer(NumType* Src);
 public:
-	Matrix1(unsigned NNSize, bool ByRow = false, ResourceManager* MM = DefaultMM) noexcept;
-	Matrix1(unsigned Rows, unsigned Cols, bool ByRow = false, ResourceManager* MM = DefaultMM) noexcept;
-	Matrix1(unsigned NNSize, NumType InitVal, bool ByRow = false, ResourceManager* MM = DefaultMM) noexcept;
-	Matrix1(unsigned Rows, unsigned Cols, NumType InitVal, bool ByRow = false, ResourceManager* MM = DefaultMM) noexcept;
+	Matrix1(size_t NNSize, bool ByRow = false, ResourceManager* MM = DefaultMM) noexcept;
+	Matrix1(size_t Rows, size_t Cols, bool ByRow = false, ResourceManager* MM = DefaultMM) noexcept;
+	Matrix1(size_t NNSize, NumType InitVal, bool ByRow = false, ResourceManager* MM = DefaultMM) noexcept;
+	Matrix1(size_t Rows, size_t Cols, NumType InitVal, bool ByRow = false, ResourceManager* MM = DefaultMM) noexcept;
 	Matrix1(const Matrix1& Target) noexcept;
 	Matrix1(Matrix1&& Target) noexcept;
 	Matrix1(std::initializer_list<std::initializer_list<NumType>> Init, bool ByRow = false, ResourceManager* MM = DefaultMM) noexcept;
-	Matrix1(unsigned NNSize, const NumType* Init, bool ByRow = false, ResourceManager* MM = DefaultMM);
-	Matrix1(unsigned Rows, unsigned Cols, const NumType* Init, bool ByRow = false, ResourceManager* MM = DefaultMM);
+	Matrix1(size_t NNSize, const NumType* Init, bool ByRow = false, ResourceManager* MM = DefaultMM);
+	Matrix1(size_t Rows, size_t Cols, const NumType* Init, bool ByRow = false, ResourceManager* MM = DefaultMM);
 
 	// Data accessing operators
 
-	inline NumType& AccessByRow(const unsigned& Row, const unsigned& Col) {
+	inline NumType& AccessByRow(size_t Row, size_t Col) {
 		return Array[Row * SizeOfLine + Col];
 	}
 
-	inline NumType& AccessByCol(const unsigned& Row, const unsigned& Col) {
+	inline NumType& AccessByCol(size_t Row, size_t Col) {
 		return Array[Col * SizeOfLine + Row];
 	}
 
-	inline const NumType& AccessByRowConst(const unsigned& Row, const unsigned& Col) const {
+	inline const NumType& AccessByRowConst(size_t Row, size_t Col) const {
 		return Array[Row * SizeOfLine + Col];
 	}
 
-	inline const NumType& AccessByColConst(const unsigned& Row, const unsigned& Col) const {
+	inline const NumType& AccessByColConst(size_t Row, size_t Col) const {
 		return Array[Col * SizeOfLine + Row];
 	}
 
-	inline const NumType& operator()(const unsigned& Row, const unsigned& Col) const {
+	inline const NumType& operator()(size_t Row, size_t Col) const {
 		return (this->*AccessFuncConst)(Row, Col);
 	}
 
-	inline NumType& operator()(const unsigned& Row, const unsigned& Col) {
+	inline NumType& operator()(size_t Row, size_t Col) {
 		return (this->*AccessFunc)(Row, Col);
 	}
 
-	inline NumType& operator[](const unsigned& Index) {
+	inline NumType& operator[](size_t Index) {
 		return Array[Index + OffsetPerLine * (Index / ElementsPerLine)];
 	}
 
-	inline const NumType& operator[](const unsigned& Index) const {
+	inline const NumType& operator[](size_t Index) const {
 		return Array[Index + OffsetPerLine * (Index / ElementsPerLine)];
 	}
 
 	inline unsigned GetRows() const { return Rows; }
 	inline unsigned GetCols() const { return Cols; }
-	inline std::pair<unsigned, unsigned> GetDim() { return std::make_pair(Rows, Cols); }
+	inline std::pair<size_t, size_t> GetDim() { return std::make_pair(Rows, Cols); }
 
 #ifdef DEBUG_
 	virtual bool CheckForIntegrity(NumType Val, bool verbose);
@@ -133,11 +136,11 @@ public:
 	Matrix1& operator=(Matrix1&& x) noexcept;
 
 	friend std::ostream& operator<<(std::ostream& out, Matrix1& MyMatrix){
-        int MaxMatrixCols = (FindConsoleWidth() - 2) / 6 > 0 ? (FindConsoleWidth() - 2) / 6 : 0;
+        size_t MaxMatrixCols = (FindConsoleWidth() - 2) / 6 > 0 ? (FindConsoleWidth() - 2) / 6 : 0;
 
         out << std::fixed << std::setprecision(3);
 
-        if (MyMatrix.Cols <= (unsigned)MaxMatrixCols) {
+        if (MyMatrix.Cols <= MaxMatrixCols) {
             MyMatrix.PrintWhole(out);
         }
         else {
@@ -149,7 +152,7 @@ public:
 
 private:
 	void PrintWhole(std::ostream& out);
-	void PrintPartitioned(std::ostream& out, int MaxMatrixCols);
+	void PrintPartitioned(std::ostream& out, size_t MaxMatrixCols);
 
 public:
 	// OPERATIONS ON MATRICES
@@ -176,16 +179,16 @@ public:
         unsigned ThreadAmount = Decider(a.Size);
         ThreadPackage Threads = ResourceManager::GetThreads();
         unsigned i;
-        unsigned long ElementsPerThread = a.Size / (unsigned long)ThreadAmount;
+        size_t ElementsPerThread = a.Size / (size_t)ThreadAmount;
 
         for (i = 0; i < ThreadAmount - 1; ++i) {
-            unsigned long offset = i * ElementsPerThread;
+            size_t offset = i * ElementsPerThread;
             Threads.Array[i] = new std::thread(MatrixSumHelperAlignedArrays<NumType>,
                                                RetVal.Array + offset, a.Array + offset, b.Array + offset, ElementsPerThread
             );
         }
 
-        unsigned long offset = i * ElementsPerThread;
+        size_t offset = i * ElementsPerThread;
         Threads.Array[i] = new std::thread(MatrixSumHelperAlignedArrays<NumType>,
                                            RetVal.Array + offset, a.Array + offset, b.Array + offset, a.Size - offset
         );
@@ -206,7 +209,7 @@ public:
         Matrix1 RetVal(a.Rows, a.Cols, a.IsHorizontal);
         void (*Func)(NumType*, const NumType*, const NumType*, unsigned, unsigned, unsigned, unsigned, unsigned, unsigned);
         void (*FrameFunc)(NumType*, const NumType*, const NumType*, unsigned, unsigned, unsigned, unsigned, unsigned, unsigned);
-        unsigned ElementsPerThread, DimToDivide, CoDim;
+        size_t ElementsPerThread, DimToDivide, CoDim;
 
         if (!a.IsHorizontal && b.IsHorizontal)
             // Left matrix is col stored and right is row stored
@@ -257,8 +260,8 @@ public:
         ElementsPerThread = (DimToDivide / ThreadAmount);
 
         for (i = 0; i < ThreadAmount; ++i) {
-            unsigned Start = i * ElementsPerThread;
-            unsigned Stop = (i + 1) * ElementsPerThread;
+            size_t Start = i * ElementsPerThread;
+            size_t Stop = (i + 1) * ElementsPerThread;
 
             Threads.Array[i] = new std::thread(Func, RetVal.Array, a.Array, b.Array,
                                                Start, Stop, CoDim, RetVal.SizeOfLine, a.SizeOfLine, b.SizeOfLine
@@ -270,7 +273,7 @@ public:
             delete Threads.Array[j];
         }
 
-        unsigned Start = i * ElementsPerThread;
+        size_t Start = i * ElementsPerThread;
         FrameFunc(RetVal.Array, a.Array, b.Array, Start, DimToDivide, CoDim,
                   RetVal.SizeOfLine, a.SizeOfLine, b.SizeOfLine);
 
@@ -300,13 +303,15 @@ public:
             return MatrixSumDiffAccess<ThreadCap, Decider>(a, b);
     }
 private:
+
+
+public:
     template<typename NumT>
     friend inline GPMM<NumT> GetMultMachine(const Matrix1<NumT>& A, const Matrix1<NumT>& B, const Matrix1<NumT>& C){
         return GPMM<NumType>(A.Array, B.Array, C.Array, A.Rows, A.Cols, B.Cols, A.SizeOfLine, B.SizeOfLine, C.SizeOfLine,
                              A.IsHorizontal, B.IsHorizontal, C.IsHorizontal);
     }
 
-public:
     template<unsigned ThreadCap = 20, unsigned (*Decider)(unsigned long long) = LogarithmicThreads<ThreadCap>>
 	friend Matrix1 operator*(const Matrix1& A, const Matrix1& B){
         if (A.Cols != B.Rows)
@@ -318,6 +323,26 @@ public:
 
         return RetVal;
     }
+
+    Matrix1 GetModified(void (Vector<NumType>::*func)()) const{
+        Matrix1 RetVal = *this;
+        (RetVal.*func)();
+        return RetVal;
+    }
+
+    Matrix1 GetModified(NumType(*func)(NumType x)) const{
+        Matrix1 RetVal = *this;
+        Vector<NumType>& Vect = RetVal;
+//        Vect.ApplyOnDataEffect<func>(); TODO
+        return RetVal;
+    }
+
+private:
+    friend OPM<NumType> GetOPM<>(const Vector<NumType>& A, const Vector<NumType>& B, Matrix1<NumType>& C, bool IsHor);
+
+public:
+    template<typename NumT, unsigned ThreadCap, unsigned (*Decider)(unsigned long long)>
+    friend Matrix1<NumT> GetOuterProduct(const Vector<NumT>& A, const Vector<NumT>& B, bool HorizontalReturn);
 };
 
 template<typename NumType>
@@ -325,10 +350,10 @@ void Matrix1<NumType>::OptimizeResourceManagement(NumType *InitVal)
 // Find optimal way to store the data, then prepares
 // Arrays to be used efficiently, needs variable Rows and Cols to operate
 {
-    unsigned long ElementsOnLastCacheLine = ElementsPerLine % ElementsPerCacheLine;
-    OffsetPerLine = ElementsOnLastCacheLine == 0 ? 0 : (unsigned) (ElementsPerCacheLine - ElementsOnLastCacheLine);
+    size_t ElementsOnLastCacheLine = ElementsPerLine % ElementsPerCacheLine;
+    OffsetPerLine = ElementsOnLastCacheLine == 0 ? 0 : (ElementsPerCacheLine - ElementsOnLastCacheLine);
     SizeOfLine = ElementsPerLine + OffsetPerLine;
-    unsigned long ExpectedAlignedSize = Lines * SizeOfLine;
+    size_t ExpectedAlignedSize = Lines * SizeOfLine;
 
 #ifdef OPTIMISE_MEM_
     unsigned long MemoryEnlargementInBytes = OffsetPerLine * Lines * (unsigned long)sizeof(NumType);
@@ -357,7 +382,7 @@ void Matrix1<NumType>::OptimizeResourceManagement(NumType *InitVal)
 }
 
 template<typename NumType>
-Matrix1<NumType>::Matrix1(unsigned int Rows, unsigned int Cols, const NumType *Init, bool ByRow, ResourceManager *MM) :
+Matrix1<NumType>::Matrix1(size_t Rows, size_t Cols, const NumType *Init, bool ByRow, ResourceManager *MM) :
         Vector<NumType>{ ByRow, MM }, Rows{ Rows }, Cols{ Cols },
         MatrixSize{ (unsigned long)Rows * (unsigned long)Cols }
 {
@@ -368,7 +393,7 @@ Matrix1<NumType>::Matrix1(unsigned int Rows, unsigned int Cols, const NumType *I
 }
 
 template<typename NumType>
-Matrix1<NumType>::Matrix1(unsigned int NNSize, const NumType *Init, bool ByRow, ResourceManager *MM) :
+Matrix1<NumType>::Matrix1(size_t NNSize, const NumType *Init, bool ByRow, ResourceManager *MM) :
         Vector<NumType>{ ByRow, MM }, Rows{ NNSize }, Cols{ NNSize },
         MatrixSize{ (unsigned long)Rows * (unsigned long)Cols }
 {
@@ -400,12 +425,12 @@ Matrix1<NumType>::Matrix1(std::initializer_list<std::initializer_list<NumType>> 
     PerformSanityChecks();
     OptimizeResourceManagement();
 
-    for (unsigned i = 0; i < Lines; ++i) {
+    for (size_t i = 0; i < Lines; ++i) {
         if (InitData[i].size() != ElementsPerLine)
             exit(0xfc);
 
         const NumType* InternalData = std::data(InitData[i]);
-        for (unsigned j = 0; j < ElementsPerLine; ++j) {
+        for (size_t j = 0; j < ElementsPerLine; ++j) {
             Array[i * SizeOfLine + j] = InternalData[j];
         }
     }
@@ -429,7 +454,7 @@ Matrix1<NumType>::Matrix1(const Matrix1 &Target) noexcept :
 }
 
 template<typename NumType>
-Matrix1<NumType>::Matrix1(unsigned int Rows, unsigned int Cols, NumType InitVal, bool ByRow,
+Matrix1<NumType>::Matrix1(size_t Rows, size_t Cols, NumType InitVal, bool ByRow,
                           ResourceManager *MM) noexcept :
         Vector<NumType>{ ByRow, MM }, Rows{ Rows }, Cols{ Cols },
         MatrixSize { (unsigned long)Rows * (unsigned long)Cols }
@@ -441,7 +466,7 @@ Matrix1<NumType>::Matrix1(unsigned int Rows, unsigned int Cols, NumType InitVal,
 }
 
 template<typename NumType>
-Matrix1<NumType>::Matrix1(unsigned int NNSize, NumType InitVal, bool ByRow, ResourceManager *MM) noexcept :
+Matrix1<NumType>::Matrix1(size_t NNSize, NumType InitVal, bool ByRow, ResourceManager *MM) noexcept :
         Vector<NumType>{ ByRow, MM }, Rows{ NNSize }, Cols{ NNSize },
         MatrixSize { (unsigned long)NNSize * (unsigned long)NNSize }
 
@@ -452,7 +477,7 @@ Matrix1<NumType>::Matrix1(unsigned int NNSize, NumType InitVal, bool ByRow, Reso
 }
 
 template<typename NumType>
-Matrix1<NumType>::Matrix1(unsigned int Rows, unsigned int Cols, bool ByRow, ResourceManager *MM) noexcept :
+Matrix1<NumType>::Matrix1(size_t Rows, size_t Cols, bool ByRow, ResourceManager *MM) noexcept :
         Vector<NumType>{ ByRow, MM }, Rows{ Rows }, Cols{ Cols },
         MatrixSize { (unsigned long)Rows * (unsigned long)Cols }
 
@@ -463,7 +488,7 @@ Matrix1<NumType>::Matrix1(unsigned int Rows, unsigned int Cols, bool ByRow, Reso
 }
 
 template<typename NumType>
-Matrix1<NumType>::Matrix1(unsigned int NNSize, bool ByRow, ResourceManager *MM) noexcept :
+Matrix1<NumType>::Matrix1(size_t NNSize, bool ByRow, ResourceManager *MM) noexcept :
         Vector<NumType>{ ByRow, MM }, Rows{ NNSize }, Cols{ NNSize },
         MatrixSize{ (unsigned long) NNSize * (unsigned long) NNSize}
 
@@ -506,8 +531,8 @@ template<typename NumType>
 bool Matrix1<NumType>::CheckForIntegrity(NumType *Val, bool verbose)
 // Passed data must be identically aligned to Array member data
 {
-    for (unsigned long i = 0; i < Lines; ++i)
-        for (unsigned long j = 0; j < ElementsPerLine; ++j)
+    for (size_t i = 0; i < Lines; ++i)
+        for (size_t j = 0; j < ElementsPerLine; ++j)
             if (Array[i * SizeOfLine + j] != Val[i * ElementsPerLine + j]) {
                 if (verbose)std::cerr << "[ERROR] Integrity test failed on Line: "
                                       << i << " and offset: " << j << std::endl;
@@ -521,8 +546,8 @@ bool Matrix1<NumType>::CheckForIntegrity(NumType *Val, bool verbose)
 
 template<typename NumType>
 bool Matrix1<NumType>::CheckForIntegrity(NumType Val, bool verbose) {
-    for (unsigned long i = 0; i < Lines; ++i)
-        for (unsigned long j = 0; j < ElementsPerLine; ++j)
+    for (size_t i = 0; i < Lines; ++i)
+        for (size_t j = 0; j < ElementsPerLine; ++j)
             if (Array[i * SizeOfLine + j] != Val) {
                 if (verbose)std::cerr << "[ERROR] Integrity test failed on Line: "
                                       << i << " and offset: " << j << std::endl;
@@ -574,23 +599,23 @@ Matrix1<NumType> &Matrix1<NumType>::operator=(Matrix1 &&x) noexcept {
 
 template<typename NumType>
 void Matrix1<NumType>::PrintWhole(std::ostream &out) {
-    for (unsigned i = 0; i < Rows; ++i) {
-        for (unsigned j = 0; j < Cols; ++j)
+    for (size_t i = 0; i < Rows; ++i) {
+        for (size_t j = 0; j < Cols; ++j)
             out << std::setw(5) << operator()(i, j) << ' ';
         out << '\n';
     }
 }
 
 template<typename NumType>
-void Matrix1<NumType>::PrintPartitioned(std::ostream &out, int MaxMatrixCols) {
-    unsigned RowParts = Rows / 5;
-    unsigned ColParts = Cols / MaxMatrixCols;
-    unsigned i;
+void Matrix1<NumType>::PrintPartitioned(std::ostream &out, size_t MaxMatrixCols) {
+    size_t RowParts = Rows / 5;
+    size_t ColParts = Cols / MaxMatrixCols;
+    size_t i;
 
-    auto PrintNRowsPartitioned = [&](unsigned StartingRow, unsigned RowCount) {
-        unsigned j;
-        static auto Helper = [&](unsigned Row, unsigned StartElement, unsigned Elements) {
-            for (unsigned k = 0; k < Elements; ++k) {
+    auto PrintNRowsPartitioned = [&](size_t StartingRow, size_t RowCount) {
+        size_t j;
+        static auto Helper = [&](size_t Row, size_t StartElement, size_t Elements) {
+            for (size_t k = 0; k < Elements; ++k) {
                 out << operator()(Row, StartElement + k) << ' ';
             }
             out << '\n';
@@ -599,19 +624,19 @@ void Matrix1<NumType>::PrintPartitioned(std::ostream &out, int MaxMatrixCols) {
         for (j = 0; j < ColParts; ++j) {
             out << '\n' << "Rows in range=" << StartingRow << ':' << StartingRow + RowCount << " and cols in="
                 << MaxMatrixCols * j << ':' << MaxMatrixCols * (j + 1) << "\n\n";
-            for (unsigned k = 0; k < RowCount; ++k)
+            for (size_t k = 0; k < RowCount; ++k)
                 Helper(StartingRow + k, MaxMatrixCols * j, MaxMatrixCols);
         }
         out << '\n' << "Rows in range=" << StartingRow << ':' << StartingRow + RowCount << " and cols in="
             << MaxMatrixCols * j << ':' << Cols << "\n\n";
-        for (unsigned k = 0; k < RowCount; ++k)
+        for (size_t k = 0; k < RowCount; ++k)
             Helper(StartingRow + k, MaxMatrixCols * j, Cols - j * MaxMatrixCols);
     };
 
     for (i = 0; i < RowParts; ++i) {
         PrintNRowsPartitioned(5 * i, 5);
     }
-    if (unsigned Rest = Rows - 5 * i) {
+    if (size_t Rest = Rows - 5 * i) {
         PrintNRowsPartitioned(5 * i, Rest);
     }
 }
@@ -626,5 +651,24 @@ Matrix1<NumType> Matrix1<NumType>::GetTransposed() const
 
     return RetVal;
 }
+
+template<typename NumT>
+inline OPM<NumT> GetOPM(const Vector<NumT>& A, const Vector<NumT>& B, Matrix1<NumT>& C, bool IsHor){
+    return OPM<NumT>(A.GetArray(), B.GetArray(), C.Array, A.GetSize(), B.GetSize(), C.SizeOfLine, IsHor);
+}
+
+template<typename NumT, unsigned ThreadCap, unsigned (*Decider)(unsigned long long)>
+Matrix1<NumT> GetOuterProduct(const Vector<NumT>& A, const Vector<NumT>& B, bool HorizontalReturn){
+    if (A.GetIsHorizontal() || !B.GetIsHorizontal()){
+        throw std::runtime_error("[ERROR] Dimensions of passed vector does not allow to perform OuterProduct\n");
+    }
+
+    Matrix1<NumT> RetVal(A.GetSize(), B.GetSize(), HorizontalReturn);
+    auto Machine = GetOPM(A, B, RetVal, HorizontalReturn);
+
+    Machine.Perform();
+    return RetVal;
+}
+
 
 #endif

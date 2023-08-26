@@ -20,58 +20,58 @@
 // ------------------------------------------
 
 template<typename NumType>
-void MatrixSumHelperAlignedArrays(NumType*Target, const NumType* Input1, const NumType* Input2, unsigned long Elements);
+void MatrixSumHelperAlignedArrays(NumType*Target, const NumType* Input1, const NumType* Input2, size_t Elements);
 // Function used to Sum matrices
 
 #ifdef __AVX__
 //defined(__AVX__) && defined(__FMA__)
 template<>
-void MatrixSumHelperAlignedArrays(double* Target,const double* const Input1, const double* const Input2, const unsigned long Elements);
+void MatrixSumHelperAlignedArrays(double* Target,const double* const Input1, const double* const Input2, const size_t Elements);
 
 template<>
-void MatrixSumHelperAlignedArrays(float* Target, const float* const Input1, const float* const Input2, const unsigned long Elements);
+void MatrixSumHelperAlignedArrays(float* Target, const float* const Input1, const float* const Input2, const size_t Elements);
 
 #endif // __AVX__
 
 template<typename NumType>
 void MatrixSumHelperNotAlignedArrays_RC_DivByCols(NumType* Target, const NumType* Input1, const NumType* Input2,
-                                                  unsigned StartCol, unsigned StopCol, unsigned Rows,
-                                                  unsigned TargetSizeOfLine, unsigned Input1SizeOfLine, unsigned Input2SizeOfLine);
+                                                  size_t StartCol, size_t StopCol, size_t Rows,
+                                                  size_t TargetSizeOfLine, size_t Input1SizeOfLine, size_t Input2SizeOfLine);
 
 template<typename NumType>
 void MatrixSumHelperNotAlignedArrays_RC_DivByRows(NumType* Target, const NumType* Input1, const NumType* Input2,
-                                                  unsigned StartRow, unsigned StopRow, unsigned Cols,
-                                                  unsigned TargetSizeOfLine, unsigned Input1SizeOfLine, unsigned Input2SizeOfLine);
+                                                  size_t StartRow, size_t StopRow, size_t Cols,
+                                                  size_t TargetSizeOfLine, size_t Input1SizeOfLine, size_t Input2SizeOfLine);
 
 template<typename NumType>
 void MatrixSumHelperNotAlignedArrays_CR_DivByCols(NumType* Target, const NumType* Input1, const NumType* Input2,
-                                                  unsigned StartCol, unsigned StopCol, unsigned Rows,
-                                                  unsigned TargetSizeOfLine, unsigned Input1SizeOfLine, unsigned Input2SizeOfLine);
+                                                  size_t StartCol, size_t StopCol, size_t Rows,
+                                                  size_t TargetSizeOfLine, size_t Input1SizeOfLine, size_t Input2SizeOfLine);
 
 template<typename NumType>
 void MatrixSumHelperNotAlignedArrays_CR_DivByRows(NumType* Target, const NumType* Input1, const NumType* Input2,
-                                                  unsigned StartRow, unsigned StopRow, unsigned Cols,
-                                                  unsigned TargetSizeOfLine, unsigned Input1SizeOfLine, unsigned Input2SizeOfLine);
+                                                  size_t StartRow, size_t StopRow, size_t Cols,
+                                                  size_t TargetSizeOfLine, size_t Input1SizeOfLine, size_t Input2SizeOfLine);
 
 template<typename NumType>
 void MatrixSumHelperNotAlignedArrays_CR_DivByCols_Frame(NumType* Target, const NumType* Input1, const NumType* Input2,
-                                                        unsigned StartCol, unsigned StopCol, unsigned Rows,
-                                                        unsigned TargetSizeOfLine, unsigned Input1SizeOfLine, unsigned Input2SizeOfLine);
+                                                        size_t StartCol, size_t StopCol, size_t Rows,
+                                                        size_t TargetSizeOfLine, size_t Input1SizeOfLine, size_t Input2SizeOfLine);
 
 template<typename NumType>
 void MatrixSumHelperNotAlignedArrays_CR_DivByRows_Frame(NumType* Target, const NumType* Input1, const NumType* Input2,
-                                                        unsigned StartRow, unsigned StopRow, unsigned Cols,
-                                                        unsigned TargetSizeOfLine, unsigned Input1SizeOfLine, unsigned Input2SizeOfLine);
+                                                        size_t StartRow, size_t StopRow, size_t Cols,
+                                                        size_t TargetSizeOfLine, size_t Input1SizeOfLine, size_t Input2SizeOfLine);
 
 template<typename NumType>
 void MatrixSumHelperNotAlignedArrays_RC_DivByRows_Frame(NumType* Target, const NumType* Input1, const NumType* Input2,
-                                                        unsigned StartRow, unsigned StopRow, unsigned Cols,
-                                                        unsigned TargetSizeOfLine, unsigned Input1SizeOfLine, unsigned Input2SizeOfLine);
+                                                        size_t StartRow, size_t StopRow, size_t Cols,
+                                                        size_t TargetSizeOfLine, size_t Input1SizeOfLine, size_t Input2SizeOfLine);
 
 template<typename NumType>
 void MatrixSumHelperNotAlignedArrays_RC_DivByCols_Frame(NumType* Target, const NumType* Input1, const NumType* Input2,
-                                                        unsigned StartCol, unsigned StopCol, unsigned Rows,
-                                                        unsigned TargetSizeOfLine, unsigned Input1SizeOfLine, unsigned Input2SizeOfLine);
+                                                        size_t StartCol, size_t StopCol, size_t Rows,
+                                                        size_t TargetSizeOfLine, size_t Input1SizeOfLine, size_t Input2SizeOfLine);
 
 //#define I2A(offset) Input2[(i + z + offset) * Input2SizeOfLine + (j + k)]
 //
@@ -103,20 +103,20 @@ void MatrixSumHelperNotAlignedArrays_RC_DivByCols_Frame(NumType* Target, const N
 
 // Naive solution
 template<typename NumType>
-void TransposeMatrixRowStored(NumType* Dst, NumType* Src, unsigned SrcLines, unsigned SrcElementsPerLine,
-                              unsigned DstSizeOfLine, unsigned SrcSizeOfLine);
+void TransposeMatrixRowStored(NumType* Dst, NumType* Src, size_t SrcLines, size_t SrcElementsPerLine,
+                              size_t DstSizeOfLine, size_t SrcSizeOfLine);
 
 // ------------------------------------------
 // Dot product code
 // ------------------------------------------
 
 template<typename NumType>
-NumType DotProduct(NumType* Src1, NumType* Src2, unsigned long Range);
+NumType DotProduct(NumType* Src1, NumType* Src2, size_t Range);
 
 #ifdef __AVX__
 
 template<>
-double DotProduct(double * Src1, double * Src2, unsigned long Range);
+double DotProduct(double * Src1, double * Src2, size_t Range);
 
 #endif // __AVX__
 
@@ -130,13 +130,13 @@ protected:
 	const NumType* const Src1;
 	const NumType* const Src2;
 	const unsigned Threads;
-	const unsigned long Range;
-	const unsigned long EndIndex;
+	const size_t Range;
+	const size_t EndIndex;
 	NumType ResultArray[MaxCPUThreads] = {NumType() };
 	std::latch Counter;
 	std::latch WriteCounter;
 public:
-	DPMCore(const NumType* const Src1, const NumType* const Src2, unsigned Threads, unsigned long Range, unsigned long EndIndex) :
+	DPMCore(const NumType* const Src1, const NumType* const Src2, unsigned Threads, size_t Range, size_t EndIndex) :
 		Src1{ Src1 }, Src2{ Src2 }, Threads{ Threads }, Range{ Range }, EndIndex{ EndIndex },
 		Counter{ Threads }, WriteCounter{ Threads }
 	{}
@@ -150,10 +150,10 @@ public:
 
 template<typename NumType>
 class DotProductMachineChunked: public DPMCore<NumType> {
-	const unsigned long ElemPerThread;
+	const size_t ElemPerThread;
 public:
-	DotProductMachineChunked(const NumType* const Src1, const NumType* const Src2, unsigned Threads, unsigned long Range) :
-		ElemPerThread{ Range / (unsigned long) Threads }, DPMCore<NumType>(Src1, Src2, Threads, Range, (Range / (unsigned long)Threads) * (unsigned long)Threads)
+	DotProductMachineChunked(const NumType* const Src1, const NumType* const Src2, unsigned Threads, size_t Range) :
+		ElemPerThread{ Range / (size_t) Threads }, DPMCore<NumType>(Src1, Src2, Threads, Range, (Range / (size_t)Threads) * (size_t)Threads)
 	{}
 
 	void StartThread(unsigned ThreadID);
@@ -162,10 +162,10 @@ public:
 #if defined(__AVX__) && defined(__FMA__)
 
 template<>
-DotProductMachineChunked<double>::DotProductMachineChunked(const double* Src1, const double* Src2, unsigned Threads, unsigned long Range);
+DotProductMachineChunked<double>::DotProductMachineChunked(const double* Src1, const double* Src2, unsigned Threads, size_t Range);
 
 template<>
-DotProductMachineChunked<float>::DotProductMachineChunked(const float* Src1, const float* Src2, unsigned Threads, unsigned long Range);
+DotProductMachineChunked<float>::DotProductMachineChunked(const float* Src1, const float* Src2, unsigned Threads, size_t Range);
 
 template<>
 void DotProductMachineChunked<double>::StartThread(unsigned ThreadID);
@@ -177,10 +177,10 @@ void DotProductMachineChunked<float>::StartThread(unsigned ThreadID);
 
 template<typename NumType>
 class DotProductMachineComb: public DPMCore<NumType> {
-	const unsigned long LoopRange;
-	const unsigned long PerCircle = CACHE_LINE / sizeof(NumType);
+	const size_t LoopRange;
+	const size_t PerCircle = CACHE_LINE / sizeof(NumType);
 public:
-	DotProductMachineComb(const NumType* const Src1, const NumType* const Src2, unsigned Threads, unsigned long Range) :
+	DotProductMachineComb(const NumType* const Src1, const NumType* const Src2, unsigned Threads, size_t Range) :
 		LoopRange{ Range }, DPMCore<NumType>(Src1, Src2, Threads, Range, (Range / (CACHE_LINE / sizeof(NumType))) * (CACHE_LINE / sizeof(NumType)))
 	{}
 
@@ -190,10 +190,10 @@ public:
 #if defined(__AVX__) && defined(__FMA__)
 
 template<>
-DotProductMachineComb<double>::DotProductMachineComb(const double* Src1, const double* Src2, unsigned Threads, unsigned long Range);
+DotProductMachineComb<double>::DotProductMachineComb(const double* Src1, const double* Src2, unsigned Threads, size_t Range);
 
 template<>
-DotProductMachineComb<float>::DotProductMachineComb(const float* Src1, const float* Src2, unsigned Threads, unsigned long Range);
+DotProductMachineComb<float>::DotProductMachineComb(const float* Src1, const float* Src2, unsigned Threads, size_t Range);
 
 template<>
 void DotProductMachineComb<double>::StartThread(unsigned ThreadID);
@@ -208,13 +208,132 @@ void DotProductMachineComb<float>::StartThread(unsigned ThreadID);
 // ------------------------------------------
 
 template<typename NumType>
-void OuterProductCol(NumType* Dst, const NumType* const Src1, const NumType* const Src2, std::pair<unsigned, unsigned> Dim) {
-	for (unsigned i = 0; i < Dim.second; ++i) {
-		for (unsigned j = 0; j < Dim.first; ++j) {
-			Dst[i * Dim.first + j] = Src1[j] * Src2[i];
-		}
-	}
+class OPM
+    // Outer Product Machine
+    // TODO Optimize for L3 - long vectors
+{
+    static constexpr size_t ElementsPerCacheLine = CACHE_LINE / sizeof(NumType);
+
+    const NumType* CoefPtr;
+    const NumType* VectPtr;
+    NumType* const MatC;
+    size_t CoefSize;
+    size_t VectSize;
+    const size_t MatCSoL;
+public:
+    OPM(const NumType* VectA, const NumType* VectB, NumType* MatC, size_t ASize,
+        size_t BSize, size_t MatCSoL, bool IsHor = false);
+    inline void Perform(){
+        const size_t Range = (CoefSize / ElementsPerCacheLine) * ElementsPerCacheLine;
+        for (size_t i = 0; i < Range; i += ElementsPerCacheLine) {
+            for (size_t j = 0; j < VectSize; ++j) {
+                MatC[i * MatCSoL + j] = VectPtr[j] * CoefPtr[i];
+                MatC[(i + 1) * MatCSoL + j] = VectPtr[j] * CoefPtr[i + 1];
+                MatC[(i + 2) * MatCSoL + j] = VectPtr[j] * CoefPtr[i + 2];
+                MatC[(i + 3) * MatCSoL + j] = VectPtr[j] * CoefPtr[i + 3];
+                MatC[(i + 4) * MatCSoL + j] = VectPtr[j] * CoefPtr[i + 4];
+                MatC[(i + 5) * MatCSoL + j] = VectPtr[j] * CoefPtr[i + 5];
+                MatC[(i + 6) * MatCSoL + j] = VectPtr[j] * CoefPtr[i + 6];
+                MatC[(i + 7) * MatCSoL + j] = VectPtr[j] * CoefPtr[i + 7];
+            }
+        }
+
+        for(size_t  j = 0; j < VectSize; ++j) {
+            for (size_t i = Range; i < CoefSize; ++i) {
+                MatC[i * MatCSoL + j] = VectPtr[j] * CoefPtr[i];
+            }
+        }
+    }
+
+private:
+
+#ifdef __AVX__
+    inline void AVXOPM(){}
+#endif
+};
+
+#ifdef __AVX__
+template<>
+inline void OPM<double>::Perform()
+#define LoadAvx(double_ptr) *(__m256d*)double_ptr
+{
+    const size_t CoefRange = (CoefSize / ElementsPerCacheLine) * ElementsPerCacheLine;
+    const double *CoefPtrIter = CoefPtr;
+
+    #pragma omp parallel for
+    for (size_t i = 0; i < CoefRange; i += ElementsPerCacheLine) {
+        __m256d CoefBuff0 = _mm256_set1_pd(*(CoefPtrIter));
+        __m256d CoefBuff1 = _mm256_set1_pd(*(CoefPtrIter + 1));
+        __m256d CoefBuff2 = _mm256_set1_pd(*(CoefPtrIter + 2));
+        __m256d CoefBuff3 = _mm256_set1_pd(*(CoefPtrIter + 3));
+        __m256d CoefBuff4 = _mm256_set1_pd(*(CoefPtrIter + 4));
+        __m256d CoefBuff5 = _mm256_set1_pd(*(CoefPtrIter + 5));
+        __m256d CoefBuff6 = _mm256_set1_pd(*(CoefPtrIter + 6));
+        __m256d CoefBuff7 = _mm256_set1_pd(*(CoefPtrIter + 7));
+        CoefPtrIter += ElementsPerCacheLine;
+
+        const double *VectPtrIter = VectPtr;
+        for (size_t j = 0; j < VectSize; j += ElementsPerCacheLine) {
+            __m256d VectA0 = _mm256_load_pd(VectPtrIter);
+            __m256d VectA1 = _mm256_load_pd(VectPtrIter + DOUBLE_VECTOR_LENGTH);
+            VectPtrIter += ElementsPerCacheLine;
+
+            double *TargetFirstPtr0 = MatC + i * MatCSoL + j;
+            double *TargetSecondPtr0 = MatC + i * MatCSoL + j + DOUBLE_VECTOR_LENGTH;
+            double *TargetFirstPtr1 = MatC + (i + 2) * MatCSoL + j;
+            double *TargetSecondPtr1 = MatC + (i + 2) * MatCSoL + j + DOUBLE_VECTOR_LENGTH;
+            double *TargetFirstPtr2 = MatC + (i + 4) * MatCSoL + j;
+            double *TargetSecondPtr2 = MatC + (i + 4) * MatCSoL + j + DOUBLE_VECTOR_LENGTH;
+            double *TargetFirstPtr3 = MatC + (i + 6) * MatCSoL + j;
+            double *TargetSecondPtr3 = MatC + (i + 6) * MatCSoL + j + DOUBLE_VECTOR_LENGTH;
+            LoadAvx(TargetFirstPtr0) = _mm256_mul_pd(VectA0, CoefBuff0);
+            LoadAvx(TargetSecondPtr0) = _mm256_mul_pd(VectA1, CoefBuff0);
+            LoadAvx(TargetFirstPtr1) = _mm256_mul_pd(VectA0, CoefBuff2);
+            LoadAvx(TargetSecondPtr1) = _mm256_mul_pd(VectA1, CoefBuff2);
+            LoadAvx(TargetFirstPtr2) = _mm256_mul_pd(VectA0, CoefBuff4);
+            LoadAvx(TargetSecondPtr2) = _mm256_mul_pd(VectA1, CoefBuff4);
+            LoadAvx(TargetFirstPtr3) = _mm256_mul_pd(VectA0, CoefBuff6);
+            LoadAvx(TargetSecondPtr3) = _mm256_mul_pd(VectA1, CoefBuff6);
+            TargetSecondPtr0 += MatCSoL;
+            TargetFirstPtr0 += MatCSoL;
+            TargetFirstPtr1 += MatCSoL;
+            TargetSecondPtr1 += MatCSoL;
+            TargetFirstPtr2 += MatCSoL;
+            TargetSecondPtr2 += MatCSoL;
+            TargetFirstPtr3 += MatCSoL;
+            TargetSecondPtr3 += MatCSoL;
+            LoadAvx(TargetFirstPtr0) = _mm256_mul_pd(VectA0, CoefBuff1);
+            LoadAvx(TargetSecondPtr0) = _mm256_mul_pd(VectA1, CoefBuff1);
+            LoadAvx(TargetFirstPtr1) = _mm256_mul_pd(VectA0, CoefBuff3);
+            LoadAvx(TargetSecondPtr1) = _mm256_mul_pd(VectA1, CoefBuff3);
+            LoadAvx(TargetFirstPtr2) = _mm256_mul_pd(VectA0, CoefBuff5);
+            LoadAvx(TargetSecondPtr2) = _mm256_mul_pd(VectA1, CoefBuff5);
+            LoadAvx(TargetFirstPtr3) = _mm256_mul_pd(VectA0, CoefBuff7);
+            LoadAvx(TargetSecondPtr3) = _mm256_mul_pd(VectA1, CoefBuff7);
+        }
+    }
+
+    const size_t CleaningRange = CoefSize - CoefRange;
+    __m256d Buffers[ElementsPerCacheLine];
+    for (size_t i = 0; i < CleaningRange; i++) {
+        Buffers[i] = _mm256_set1_pd(CoefPtr[CoefRange + i]);
+    }
+
+    for (size_t j = 0; j < VectSize; j += ElementsPerCacheLine) {
+        __m256d VectFirst = _mm256_load_pd(VectPtr + j);
+        __m256d VectSecond = _mm256_load_pd(VectPtr + j + DOUBLE_VECTOR_LENGTH);
+
+        for (size_t i = 0; i < CleaningRange; i++)
+#define CleaningTargetUpper MatC + (i + CoefRange) * MatCSoL + j
+#define CleaningTargetLower MatC + (i + CoefRange) * MatCSoL + j + DOUBLE_VECTOR_LENGTH
+        {
+            _mm256_store_pd(CleaningTargetUpper, _mm256_mul_pd(VectFirst, Buffers[i]));
+            _mm256_store_pd(CleaningTargetLower, _mm256_mul_pd(VectSecond, Buffers[i]));
+        }
+    }
 }
+
+#endif // __AVX__
 
 // ------------------------------------------
 // Matrix Sum Implementation
@@ -222,38 +341,38 @@ void OuterProductCol(NumType* Dst, const NumType* const Src1, const NumType* con
 
 template<typename T>
 void MatrixSumHelperAlignedArrays(T *const Target, const T *const Input1, const T *const Input2,
-                                  const unsigned long Elements) {
+                                  const size_t Elements) {
     for (unsigned long i = 0; i < Elements; ++i)
         Target[i] = Input1[i] + Input2[i];
 }
 
 template<typename NumType>
 void MatrixSumHelperNotAlignedArrays_RC_DivByCols(NumType *Target, const NumType *const Input1, const NumType *const Input2,
-                                                  const unsigned int StartCol, const unsigned int StopCol,
-                                                  const unsigned int Rows, const unsigned int TargetSizeOfLine,
-                                                  const unsigned int Input1SizeOfLine,
-                                                  const unsigned int Input2SizeOfLine)
+                                                  const size_t StartCol, const size_t StopCol,
+                                                  const size_t Rows, const size_t TargetSizeOfLine,
+                                                  const size_t Input1SizeOfLine,
+                                                  const size_t Input2SizeOfLine)
 // Function assumes that passed Start and StopCol ale divisible by NumType corresponding length of cache line;
 // otherwise, behavior is undefined.
 // Also, all data pointers should be aligned to cache lines;
 // otherwise, the operation may be much slower.
 {
-    const unsigned ElementsInCacheLine = CACHE_LINE / sizeof(NumType);
-    const unsigned RowsRange = ((unsigned)(Rows / ElementsInCacheLine)) * ElementsInCacheLine;
+    const size_t ElementsInCacheLine = CACHE_LINE / sizeof(NumType);
+    const size_t RowsRange = ((size_t)(Rows / ElementsInCacheLine)) * ElementsInCacheLine;
 
-    for (unsigned i = 0; i < RowsRange; i += ElementsInCacheLine) {
-        for (unsigned j = StartCol; j < StopCol; j += ElementsInCacheLine) {
-            for (unsigned k = 0; k < ElementsInCacheLine; ++k) {
-                for (unsigned z = 0; z < ElementsInCacheLine; ++z) {
+    for (size_t i = 0; i < RowsRange; i += ElementsInCacheLine) {
+        for (size_t j = StartCol; j < StopCol; j += ElementsInCacheLine) {
+            for (size_t k = 0; k < ElementsInCacheLine; ++k) {
+                for (size_t z = 0; z < ElementsInCacheLine; ++z) {
                     Target[(i + z) * TargetSizeOfLine + j + k] = Input1[(i + z) * Input1SizeOfLine + j + k] + Input2[(j + k) * Input2SizeOfLine + i + z];
                 }
             }
         }
     }
 
-    for (unsigned i = StartCol; i < StopCol; ++i) {
-        for (unsigned j = RowsRange; j < Rows; ++j) {
-            for (unsigned k = 0; k < ElementsInCacheLine; ++k) {
+    for (size_t i = StartCol; i < StopCol; ++i) {
+        for (size_t j = RowsRange; j < Rows; ++j) {
+            for (size_t k = 0; k < ElementsInCacheLine; ++k) {
                 Target[j * TargetSizeOfLine + i + k] = Input1[j * Input1SizeOfLine + i + k] + Input2[(i + k) * Input2SizeOfLine + j];
             }
         }
@@ -263,21 +382,21 @@ void MatrixSumHelperNotAlignedArrays_RC_DivByCols(NumType *Target, const NumType
 template<typename NumType>
 void
 MatrixSumHelperNotAlignedArrays_RC_DivByRows(NumType *Target, const NumType *const Input1, const NumType *const Input2,
-                                             const unsigned int StartRow, const unsigned int StopRow,
-                                             const unsigned int Cols, const unsigned int TargetSizeOfLine,
-                                             const unsigned int Input1SizeOfLine, const unsigned int Input2SizeOfLine)
+                                             const size_t StartRow, const size_t StopRow,
+                                             const size_t Cols, const size_t TargetSizeOfLine,
+                                             const size_t Input1SizeOfLine, const size_t Input2SizeOfLine)
 // Function assumes that passed Start and StopCol ale divisible by NumType corresponding length of cache line;
 // otherwise, behavior is undefined.
 // Also, all data pointers should be aligned to cache lines;
 // otherwise, the operation may be much slower.
 {
-    const unsigned ElementsInCacheLine = CACHE_LINE / sizeof(NumType);
-    const unsigned ColsRange = ((unsigned)(Cols / ElementsInCacheLine)) * ElementsInCacheLine;
+    const size_t ElementsInCacheLine = CACHE_LINE / sizeof(NumType);
+    const size_t ColsRange = ((size_t)(Cols / ElementsInCacheLine)) * ElementsInCacheLine;
 
-    for (unsigned j = StartRow; j < StopRow; j += ElementsInCacheLine) {
-        for (unsigned i = 0; i < ColsRange; i += ElementsInCacheLine) {
-            for (unsigned k = 0; k < ElementsInCacheLine; ++k) {
-                for (unsigned z = 0; z < ElementsInCacheLine; ++z) {
+    for (size_t j = StartRow; j < StopRow; j += ElementsInCacheLine) {
+        for (size_t i = 0; i < ColsRange; i += ElementsInCacheLine) {
+            for (size_t k = 0; k < ElementsInCacheLine; ++k) {
+                for (size_t z = 0; z < ElementsInCacheLine; ++z) {
                     Target[(j + k) * TargetSizeOfLine + i + z] = Input1[(j + k) * Input1SizeOfLine + i + z] + Input2[(i + z) * Input2SizeOfLine + j + k];
                 }
             }
@@ -295,28 +414,28 @@ MatrixSumHelperNotAlignedArrays_RC_DivByRows(NumType *Target, const NumType *con
 template<typename NumType>
 void
 MatrixSumHelperNotAlignedArrays_CR_DivByCols(NumType *Target, const NumType *const Input1, const NumType *const Input2,
-                                             const unsigned int StartCol, const unsigned int StopCol,
-                                             const unsigned int Rows, const unsigned int TargetSizeOfLine,
-                                             const unsigned int Input1SizeOfLine, const unsigned int Input2SizeOfLine)
+                                             const size_t StartCol, const size_t StopCol,
+                                             const size_t Rows, const size_t TargetSizeOfLine,
+                                             const size_t Input1SizeOfLine, const size_t Input2SizeOfLine)
 // Function assumes that passed Start and StopCol ale divisible by NumType corresponding length of cache line;
 // otherwise, behavior is undefined.
 // Also, all data pointers should be aligned to cache lines;
 // otherwise, the operation may be much slower.
 {
-    const unsigned ElementsInCacheLine = CACHE_LINE / sizeof(NumType);
-    const unsigned RowsRange = ((unsigned) (Rows / ElementsInCacheLine)) * ElementsInCacheLine;
-    for (unsigned j = StartCol; j < StopCol; j += ElementsInCacheLine) {
-        for (unsigned i = 0; i < RowsRange; i += ElementsInCacheLine) {
-            for (unsigned k = 0; k < ElementsInCacheLine; ++k) {
-                for (unsigned z = 0; z < ElementsInCacheLine; ++z) {
+    const size_t ElementsInCacheLine = CACHE_LINE / sizeof(NumType);
+    const size_t RowsRange = ((size_t) (Rows / ElementsInCacheLine)) * ElementsInCacheLine;
+    for (size_t j = StartCol; j < StopCol; j += ElementsInCacheLine) {
+        for (size_t i = 0; i < RowsRange; i += ElementsInCacheLine) {
+            for (size_t k = 0; k < ElementsInCacheLine; ++k) {
+                for (size_t z = 0; z < ElementsInCacheLine; ++z) {
                     Target[(j + k) * TargetSizeOfLine + i + z] = Input1[(j + k) * Input1SizeOfLine + i + z] + Input2[(i + z) * Input2SizeOfLine + j + k];
                 }
             }
         }
     }
 
-    for (unsigned j = StartCol; j < StopCol; ++j) {
-        for (unsigned z = RowsRange; z < Rows; ++z) {
+    for (size_t j = StartCol; j < StopCol; ++j) {
+        for (size_t z = RowsRange; z < Rows; ++z) {
             Target[j * TargetSizeOfLine + z] = Input1[j * Input1SizeOfLine + z] + Input2[z * Input2SizeOfLine + j];
         }
     }
@@ -325,30 +444,30 @@ MatrixSumHelperNotAlignedArrays_CR_DivByCols(NumType *Target, const NumType *con
 template<typename NumType>
 void
 MatrixSumHelperNotAlignedArrays_CR_DivByRows(NumType *Target, const NumType *const Input1, const NumType *const Input2,
-                                             const unsigned int StartRow, const unsigned int StopRow,
-                                             const unsigned int Cols, const unsigned int TargetSizeOfLine,
-                                             const unsigned int Input1SizeOfLine, const unsigned int Input2SizeOfLine)
+                                             const size_t StartRow, const size_t StopRow,
+                                             const size_t Cols, const size_t TargetSizeOfLine,
+                                             const size_t Input1SizeOfLine, const size_t Input2SizeOfLine)
 // Function assumes that passed Start and StopCol ale divisible by NumType corresponding length of cache line;
 // otherwise, behavior is undefined.
 // Also, all data pointers should be aligned to cache lines;
 // otherwise, the operation may be much slower.
 {
-    const unsigned ElementsInCacheLine = CACHE_LINE / sizeof(NumType);
-    const unsigned ColsRange = ((unsigned)(Cols / ElementsInCacheLine)) * ElementsInCacheLine;
+    const size_t ElementsInCacheLine = CACHE_LINE / sizeof(NumType);
+    const size_t ColsRange = ((size_t)(Cols / ElementsInCacheLine)) * ElementsInCacheLine;
 
-    for (unsigned i = 0; i < ColsRange; i += ElementsInCacheLine) {
-        for (unsigned j = StartRow; j < StopRow; j += ElementsInCacheLine) {
-            for (unsigned k = 0; k < ElementsInCacheLine; ++k) {
-                for (unsigned z = 0; z < ElementsInCacheLine; ++z) {
+    for (size_t i = 0; i < ColsRange; i += ElementsInCacheLine) {
+        for (size_t j = StartRow; j < StopRow; j += ElementsInCacheLine) {
+            for (size_t k = 0; k < ElementsInCacheLine; ++k) {
+                for (size_t z = 0; z < ElementsInCacheLine; ++z) {
                     Target[(i + k) * TargetSizeOfLine + j + z] = Input1[(i + k) * Input1SizeOfLine + j + z] + Input2[(j + z) * Input2SizeOfLine + i + k];
                 }
             }
         }
     }
 
-    for (unsigned i = StartRow; i < StopRow; i += ElementsInCacheLine) {
-        for (unsigned z = ColsRange; z < Cols; ++z) {
-            for (unsigned k = 0; k < ElementsInCacheLine; ++k)
+    for (size_t i = StartRow; i < StopRow; i += ElementsInCacheLine) {
+        for (size_t z = ColsRange; z < Cols; ++z) {
+            for (size_t k = 0; k < ElementsInCacheLine; ++k)
                 Target[z * TargetSizeOfLine + i + k] = Input1[z * Input1SizeOfLine + i + k] + Input2[(i + k) * Input2SizeOfLine + z];
         }
     }
@@ -356,26 +475,26 @@ MatrixSumHelperNotAlignedArrays_CR_DivByRows(NumType *Target, const NumType *con
 
 template<typename NumType>
 void MatrixSumHelperNotAlignedArrays_CR_DivByCols_Frame(NumType *Target, const NumType *const Input1,
-                                                        const NumType *const Input2, const unsigned int StartCol,
-                                                        const unsigned int StopCol, const unsigned int Rows,
-                                                        const unsigned int TargetSizeOfLine,
-                                                        const unsigned int Input1SizeOfLine,
-                                                        const unsigned int Input2SizeOfLine) {
+                                                        const NumType *const Input2, const size_t StartCol,
+                                                        const size_t StopCol, const size_t Rows,
+                                                        const size_t TargetSizeOfLine,
+                                                        const size_t Input1SizeOfLine,
+                                                        const size_t Input2SizeOfLine) {
     if (StartCol == StopCol) return;
 
-    const unsigned ElementsInCacheLine = CACHE_LINE / sizeof(NumType);
-    const unsigned RowsRange = ((unsigned)(Rows / ElementsInCacheLine)) * ElementsInCacheLine;
+    const size_t ElementsInCacheLine = CACHE_LINE / sizeof(NumType);
+    const size_t RowsRange = ((size_t)(Rows / ElementsInCacheLine)) * ElementsInCacheLine;
 
-    for (unsigned i = 0; i < RowsRange; i += ElementsInCacheLine) {
-        for (unsigned k = StartCol; k < StopCol; ++k) {
-            for (unsigned j = 0; j < ElementsInCacheLine; ++j) {
+    for (size_t i = 0; i < RowsRange; i += ElementsInCacheLine) {
+        for (size_t k = StartCol; k < StopCol; ++k) {
+            for (size_t j = 0; j < ElementsInCacheLine; ++j) {
                 Target[k * TargetSizeOfLine + i + j] = Input1[k * Input1SizeOfLine + i + j] + Input2[(i + j) * Input2SizeOfLine + k];
             }
         }
     }
 
-    for (unsigned i = RowsRange; i < Rows; ++i) {
-        for (unsigned k = StartCol; k < StopCol; ++k) {
+    for (size_t i = RowsRange; i < Rows; ++i) {
+        for (size_t k = StartCol; k < StopCol; ++k) {
             Target[k * TargetSizeOfLine + i] = Input1[k * Input1SizeOfLine + i] + Input2[i * Input2SizeOfLine + k];
         }
     }
@@ -383,26 +502,26 @@ void MatrixSumHelperNotAlignedArrays_CR_DivByCols_Frame(NumType *Target, const N
 
 template<typename NumType>
 void MatrixSumHelperNotAlignedArrays_CR_DivByRows_Frame(NumType *Target, const NumType *const Input1,
-                                                        const NumType *const Input2, const unsigned int StartRow,
-                                                        const unsigned int StopRow, const unsigned int Cols,
-                                                        const unsigned int TargetSizeOfLine,
-                                                        const unsigned int Input1SizeOfLine,
-                                                        const unsigned int Input2SizeOfLine) {
+                                                        const NumType *const Input2, const size_t StartRow,
+                                                        const size_t StopRow, const size_t Cols,
+                                                        const size_t TargetSizeOfLine,
+                                                        const size_t Input1SizeOfLine,
+                                                        const size_t Input2SizeOfLine) {
     if (StartRow == StopRow) return;
 
-    const unsigned ElementsInCacheLine = CACHE_LINE / sizeof(NumType);
-    const unsigned ColsRange = ((unsigned)(Cols / ElementsInCacheLine)) * ElementsInCacheLine;
+    const size_t ElementsInCacheLine = CACHE_LINE / sizeof(NumType);
+    const size_t ColsRange = ((size_t)(Cols / ElementsInCacheLine)) * ElementsInCacheLine;
 
-    for (unsigned i = 0; i < ColsRange; i += ElementsInCacheLine) {
-        for (unsigned j = 0; j < ElementsInCacheLine; ++j) {
-            for (unsigned k = StartRow; k < StopRow; ++k) {
+    for (size_t i = 0; i < ColsRange; i += ElementsInCacheLine) {
+        for (size_t j = 0; j < ElementsInCacheLine; ++j) {
+            for (size_t k = StartRow; k < StopRow; ++k) {
                 Target[(i + j) * TargetSizeOfLine + k] = Input1[(i + j) * Input1SizeOfLine + k] + Input2[k * Input2SizeOfLine + i + j];
             }
         }
     }
 
-    for (unsigned i = ColsRange; i < Cols; ++i) {
-        for (unsigned k = StartRow; k < StopRow; ++k) {
+    for (size_t i = ColsRange; i < Cols; ++i) {
+        for (size_t k = StartRow; k < StopRow; ++k) {
             Target[i * TargetSizeOfLine + k] = Input1[i * Input1SizeOfLine + k] + Input2[k * Input2SizeOfLine + i];
         }
     }
@@ -410,24 +529,24 @@ void MatrixSumHelperNotAlignedArrays_CR_DivByRows_Frame(NumType *Target, const N
 
 template<typename NumType>
 void MatrixSumHelperNotAlignedArrays_RC_DivByRows_Frame(NumType *Target, const NumType *Input1, const NumType *Input2,
-                                                        unsigned int StartRow, unsigned int StopRow, unsigned int Cols,
-                                                        unsigned int TargetSizeOfLine, unsigned int Input1SizeOfLine,
-                                                        unsigned int Input2SizeOfLine) {
+                                                        const size_t StartRow, const size_t StopRow, const size_t Cols,
+                                                        const size_t TargetSizeOfLine, const size_t Input1SizeOfLine,
+                                                        const size_t Input2SizeOfLine) {
     if (StartRow == StopRow) return;
 
-    const unsigned ElementsInCacheLine = CACHE_LINE / sizeof(NumType);
-    const unsigned ColsRange = ((unsigned)(Cols / ElementsInCacheLine)) * ElementsInCacheLine;
+    const size_t ElementsInCacheLine = CACHE_LINE / sizeof(NumType);
+    const size_t ColsRange = ((size_t)(Cols / ElementsInCacheLine)) * ElementsInCacheLine;
 
-    for (unsigned i = 0; i < ColsRange; i += ElementsInCacheLine) {
-        for (unsigned j = 0; j < ElementsInCacheLine; ++j) {
-            for (unsigned k = StartRow; k < StopRow; ++k) {
+    for (size_t i = 0; i < ColsRange; i += ElementsInCacheLine) {
+        for (size_t j = 0; j < ElementsInCacheLine; ++j) {
+            for (size_t k = StartRow; k < StopRow; ++k) {
                 Target[(i + j) * TargetSizeOfLine + k] = Input1[(i + j) * Input1SizeOfLine + k] + Input2[k * Input2SizeOfLine + i + j];
             }
         }
     }
 
-    for (unsigned i = ColsRange; i < Cols; ++i) {
-        for (unsigned k = StartRow; k < StopRow; ++k) {
+    for (size_t i = ColsRange; i < Cols; ++i) {
+        for (size_t k = StartRow; k < StopRow; ++k) {
             Target[i * TargetSizeOfLine + k] = Input1[i * Input1SizeOfLine + k] + Input2[k * Input2SizeOfLine + i];
         }
     }
@@ -435,26 +554,26 @@ void MatrixSumHelperNotAlignedArrays_RC_DivByRows_Frame(NumType *Target, const N
 
 template<typename NumType>
 void MatrixSumHelperNotAlignedArrays_RC_DivByCols_Frame(NumType *Target, const NumType *const Input1,
-                                                        const NumType *const Input2, const unsigned int StartCol,
-                                                        const unsigned int StopCol, const unsigned int Rows,
-                                                        const unsigned int TargetSizeOfLine,
-                                                        const unsigned int Input1SizeOfLine,
-                                                        const unsigned int Input2SizeOfLine) {
+                                                        const NumType *const Input2, const size_t StartCol,
+                                                        const size_t StopCol, const size_t Rows,
+                                                        const size_t TargetSizeOfLine,
+                                                        const size_t Input1SizeOfLine,
+                                                        const size_t Input2SizeOfLine) {
     if (StartCol == StopCol) return;
 
-    const unsigned ElementsInCacheLine = CACHE_LINE / sizeof(NumType);
-    const unsigned RowsRange = ((unsigned)(Rows / ElementsInCacheLine)) * ElementsInCacheLine;
+    const size_t ElementsInCacheLine = CACHE_LINE / sizeof(NumType);
+    const size_t RowsRange = ((size_t)(Rows / ElementsInCacheLine)) * ElementsInCacheLine;
 
-    for (unsigned i = 0; i < RowsRange; i+= ElementsInCacheLine) {
-        for (unsigned k = StartCol; k < StopCol; ++k) {
-            for (unsigned j = 0; j < ElementsInCacheLine; ++j) {
+    for (size_t i = 0; i < RowsRange; i+= ElementsInCacheLine) {
+        for (size_t k = StartCol; k < StopCol; ++k) {
+            for (size_t j = 0; j < ElementsInCacheLine; ++j) {
                 Target[(i + j) * TargetSizeOfLine + k] = Input1[(i + j) * Input1SizeOfLine + k] + Input2[k * Input2SizeOfLine + i + j];
             }
         }
     }
 
-    for (unsigned i = RowsRange; i < Rows; ++i) {
-        for (unsigned j = StartCol; j < StopCol; ++j)
+    for (size_t i = RowsRange; i < Rows; ++i) {
+        for (size_t j = StartCol; j < StopCol; ++j)
             Target[i * TargetSizeOfLine + j] = Input1[i * TargetSizeOfLine + j] + Input2[j * TargetSizeOfLine + i];
     }
 }
@@ -465,10 +584,10 @@ void MatrixSumHelperNotAlignedArrays_RC_DivByCols_Frame(NumType *Target, const N
 
 template<typename NumType>
 void
-TransposeMatrixRowStored(NumType *Dst, NumType *Src, const unsigned int SrcLines, const unsigned int SrcElementsPerLine,
-                         const unsigned int DstSizeOfLine, const unsigned int SrcSizeOfLine) {
-    for (unsigned i = 0; i < SrcLines; ++i) {
-        for (unsigned j = 0; j < SrcElementsPerLine; ++j) {
+TransposeMatrixRowStored(NumType *Dst, NumType *Src, const size_t SrcLines, const size_t SrcElementsPerLine,
+                         const size_t DstSizeOfLine, const size_t SrcSizeOfLine) {
+    for (size_t i = 0; i < SrcLines; ++i) {
+        for (size_t j = 0; j < SrcElementsPerLine; ++j) {
             Dst[j * DstSizeOfLine + i] = Src[i * SrcSizeOfLine + j];
         }
     }
@@ -479,10 +598,10 @@ TransposeMatrixRowStored(NumType *Dst, NumType *Src, const unsigned int SrcLines
 // ------------------------------------------
 
 template<typename NumType>
-NumType DotProduct(NumType *const Src1, NumType *const Src2, const unsigned long Range) {
+NumType DotProduct(NumType *const Src1, NumType *const Src2, const size_t Range) {
     NumType result = NumType();
 
-    for (unsigned long i = 0; i < Range; i++) {
+    for (size_t i = 0; i < Range; i++) {
         result += Src1[i] * Src2[i];
     }
 
@@ -493,7 +612,7 @@ template<typename NumType>
 NumType DPMCore<NumType>::GetResult() {
     NumType Ret = NumType();
 
-    for (unsigned long i = EndIndex; i < Range; ++i) {
+    for (size_t i = EndIndex; i < Range; ++i) {
         Ret += Src1[i] * Src2[i];
     }
 
@@ -509,10 +628,10 @@ void DotProductMachineChunked<NumType>::StartThread(unsigned int ThreadID) {
     NumType Ret = NumType();
     const NumType* const S1 = DPMCore<NumType>::Src1;
     const NumType* const S2 = DPMCore<NumType>::Src2;
-    const unsigned long LoopRange = (ThreadID + 1) * ElemPerThread;
+    const size_t LoopRange = (ThreadID + 1) * ElemPerThread;
 
     DPMCore<NumType>::Counter.arrive_and_wait();
-    for (unsigned long i = ThreadID * ElemPerThread; i < LoopRange; ++i) {
+    for (size_t i = ThreadID * ElemPerThread; i < LoopRange; ++i) {
         Ret += S1[i] * S2[i];
     }
 
@@ -529,12 +648,12 @@ void DotProductMachineComb<T>::StartThread(unsigned int ThreadID) {
     const T* const S1 = DPMCore<T>::Src1 + (ThreadID * PerCircle);
     const T* const S2 = DPMCore<T>::Src2 + (ThreadID * PerCircle);
 
-    const unsigned long Jump = PerCircle * DPMCore<T>::Threads;
+    const size_t Jump = PerCircle * DPMCore<T>::Threads;
 
     DPMCore<T>::Counter.arrive_and_wait();
 
-    for (unsigned long i = 0; i < LoopRange; i += Jump) {
-        for (unsigned long j = 0; j < PerCircle; ++j) {
+    for (size_t i = 0; i < LoopRange; i += Jump) {
+        for (size_t j = 0; j < PerCircle; ++j) {
             SingleOPStraight(j);
         }
     }
@@ -542,7 +661,7 @@ void DotProductMachineComb<T>::StartThread(unsigned int ThreadID) {
     DPMCore<T>::WriteCounter.arrive_and_wait();
     T Result = T();
 
-    for (int i = 0; i < PerCircle; ++i) {
+    for (size_t i = 0; i < PerCircle; ++i) {
         Result += TempArray[i];
     }
 
@@ -551,65 +670,27 @@ void DotProductMachineComb<T>::StartThread(unsigned int ThreadID) {
 }
 
 // ------------------------------------------
-// Outer Product
+// Outer Product Implementation
 // ------------------------------------------
 
-//#define pt (const __m256d* const)
-//#define LOB(offset) VectDst[offset][0] = _mm256_mul_pd(*(pt(Src1 + j)), Mult[offset]); VectDst[offset][1] = _mm256_mul_pd(*(pt(Src1 + j + 4)), Mult[offset]);
-//#define LoadDst(offset) (__m256d*) (Dst + (i + offset) * Dim.first);
-//
-//template<>
-//void OuterProductCol(double* Dst, const double* const Src1, const double* const Src2, std::pair<unsigned, unsigned> Dim) {
-//    //const unsigned long BlockSize = 8;
-//    //const unsigned long BlockedRangeHorizontal =
-//    //	Dim.second >= BlockSize ? Dim.second - BlockSize : 0; // CHECK
-//    //const unsigned long BlockedRangeVertical =
-//    //	Dim.first >= BlockSize ? Dim.first - BlockSize : 0; // CHECK
-//
-//    //for (unsigned long i = 0; i < BlockedRangeHorizontal; i += BlockSize) {
-//    //	for (unsigned long j = 0; j < BlockedRangeVertical; j += BlockSize) {
-//    //		for (unsigned long k = i; k < i + BlockSize; ++k) {
-//    //			for (unsigned long z = j; z < j + BlockSize; ++z) {
-//    //				Dst[k * Dim.second + z] = Src1[k] * Src2[z];
-//    //			}
-//    //		}
-//    //	}
-//    //}
-//
-//    const unsigned long BlockSize = 8;
-//    const unsigned long BlockedRangeHorizontal =
-//            Dim.second >= BlockSize ? Dim.second - BlockSize : 0; // CHECK
-//    const unsigned long BlockedRangeVertical =
-//            Dim.first >= BlockSize ? Dim.first - BlockSize : 0; // CHECK
-//
-//    const auto S1 = (const __m256d* const) (Src1);
-//    auto VectDst = (__m256d**) _aligned_malloc(sizeof(__m256d*) * BlockSize, ALIGN);
-//    auto Mult = (__m256d*) _aligned_malloc(sizeof(__m256d) * BlockSize, ALIGN);
-//
-//    if (!VectDst || !Mult) {
-//        std::cout << "alloc err\n";
-//        exit(0);
-//    }
-//
-//    for (unsigned long i = 0; i < BlockedRangeHorizontal; i += BlockSize) {
-//
-//        for (int z = 0; z < BlockSize; ++z) {
-//            VectDst[z] = LoadDst(z);
-//            Mult[z] = _mm256_set1_pd(Src2[i + z]);
-//        }
-//
-//        for (unsigned long j = 0; j < BlockedRangeVertical; j += BlockSize) {
-//            for (int z = 0; z < BlockSize; ++z) {
-//                LOB(z);
-//            }
-//        }
-//
-//        _mm256_add_epi64(((__m256i*)VectDst)[0], _mm256_set1_epi64x(2));
-//        _mm256_add_epi64(((__m256i*)VectDst)[1], _mm256_set1_epi64x(2));
-//    }
-//
-//    _aligned_free(Mult);
-//    _aligned_free(VectDst);
-//}
+template<typename NumType>
+OPM<NumType>::OPM(const NumType *VectA, const NumType *VectB, NumType *MatC, size_t ASize, size_t BSize,
+                  size_t MatCSoL, bool IsHor):
+    MatC{ MatC }, MatCSoL{ MatCSoL }
+{
+    if (IsHor){
+        CoefPtr = VectA;
+        VectPtr = VectB;
+        CoefSize = ASize;
+        VectSize = BSize;
+    }
+    else{
+        CoefPtr = VectB;
+        VectPtr = VectA;
+        CoefSize = BSize;
+        VectSize = ASize;
+    }
+}
 
-#endif // PARALLELNUM_HELPERS_H_
+
+#endif // PARALLELNUM_NUMERICAL_CORE_H_

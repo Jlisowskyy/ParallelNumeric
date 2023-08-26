@@ -18,34 +18,34 @@
 
 template<>
 void MatrixSumHelperAlignedArrays(double *Target, const double *const Input1, const double *const Input2,
-                                  const unsigned long Elements) {
+                                  const size_t Elements) {
     const auto VectInput1 = (const __m256d*)Input1;
     const auto VectInput2 = (const __m256d*)Input2;
     auto VectTarget = (__m256d*)Target;
 
     const unsigned long VectSize = Elements / DOUBLE_VECTOR_LENGTH;
-    for (unsigned long i = 0; i < VectSize; ++i) {
+    for (size_t i = 0; i < VectSize; ++i) {
         VectTarget[i] = _mm256_add_pd(VectInput1[i], VectInput2[i]);
     }
 
-    for (unsigned long i = VectSize * DOUBLE_VECTOR_LENGTH; i < Elements; ++i) {
+    for (size_t i = VectSize * DOUBLE_VECTOR_LENGTH; i < Elements; ++i) {
         Target[i] = Input1[i] + Input2[i];
     }
 }
 
 template<>
 void MatrixSumHelperAlignedArrays(float *Target, const float *const Input1, const float *const Input2,
-                                  const unsigned long Elements) {
+                                  const size_t Elements) {
     const auto VectInput1 = (const __m256*)Input1;
     const auto VectInput2 = (const __m256*)Input2;
     auto VectTarget = (__m256*)Target;
 
-    const unsigned long VectSize = Elements / SINGLE_VECTOR_LENGTH;
-    for (unsigned long i = 0; i < VectSize; ++i) {
+    const size_t VectSize = Elements / SINGLE_VECTOR_LENGTH;
+    for (size_t i = 0; i < VectSize; ++i) {
         VectTarget[i] = _mm256_add_ps(VectInput1[i], VectInput2[i]);
     }
 
-    for (unsigned long i = VectSize * SINGLE_VECTOR_LENGTH; i < Elements; ++i) {
+    for (size_t i = VectSize * SINGLE_VECTOR_LENGTH; i < Elements; ++i) {
         Target[i] = Input1[i] + Input2[i];
     }
 }
@@ -67,18 +67,18 @@ void MatrixSumHelperAlignedArrays(float *Target, const float *const Input1, cons
 #ifdef __AVX__
 
 template<>
-double DotProduct(double *const Src1, double *const Src2, unsigned long Range) {
+double DotProduct(double *const Src1, double *const Src2, size_t Range) {
     const auto VectSrc1 = (__m256d*) Src1;
     const auto VectSrc2 = (__m256d*) Src2;
     __m256d Store = _mm256_set_pd(0, 0, 0, 0);
 
-    const unsigned long VectRange = Range/4;
-    for (unsigned long i = 0; i < VectRange; ++i) {
+    const size_t VectRange = Range/4;
+    for (size_t i = 0; i < VectRange; ++i) {
         Store = _mm256_fmadd_pd(VectSrc1[i], VectSrc2[i], Store);
     }
 
     double EndResult = 0;
-    for (unsigned long i = VectRange * 4; i < Range; ++i) {
+    for (size_t i = VectRange * 4; i < Range; ++i) {
         EndResult += Src1[i] * Src2[i];
     }
 
@@ -91,13 +91,13 @@ double DotProduct(double *const Src1, double *const Src2, unsigned long Range) {
 #if defined(__AVX__) && defined(__FMA__)
 
 template<>
-DotProductMachineChunked<double>::DotProductMachineChunked(const double* const Src1, const double* const Src2, const unsigned Threads, const unsigned long Range) :
+DotProductMachineChunked<double>::DotProductMachineChunked(const double* const Src1, const double* const Src2, const unsigned Threads, const size_t Range) :
         DPMCore<double>(Src1, Src2, Threads, Range, (Range / (Threads * DOUBLE_VECTOR_LENGTH)) * Threads * DOUBLE_VECTOR_LENGTH),
         ElemPerThread{ Range / (Threads * DOUBLE_VECTOR_LENGTH) }
 {}
 
 template<>
-DotProductMachineChunked<float>::DotProductMachineChunked(const float* const Src1, const float* const Src2, const unsigned Threads, const unsigned long Range) :
+DotProductMachineChunked<float>::DotProductMachineChunked(const float* const Src1, const float* const Src2, const unsigned Threads, const size_t Range) :
         DPMCore<float>(Src1, Src2, Threads, Range, (Range / (Threads * SINGLE_VECTOR_LENGTH)) * Threads * SINGLE_VECTOR_LENGTH),
         ElemPerThread{ Range / (Threads * SINGLE_VECTOR_LENGTH) }
 {}
@@ -108,10 +108,10 @@ void DotProductMachineChunked<double>::StartThread(const unsigned ThreadID) {
     const auto VectSrc1 = (const __m256d*) Src1;
     const auto VectSrc2 = (const __m256d*) Src2;
     __m256d Store = _mm256_set_pd(0, 0, 0, 0);
-    const unsigned long LoopRange = (ThreadID + 1) * ElemPerThread;
+    const size_t LoopRange = (ThreadID + 1) * ElemPerThread;
 
     Counter.arrive_and_wait();
-    for (unsigned long i = ThreadID * ElemPerThread; i < LoopRange; ++i) {
+    for (size_t i = ThreadID * ElemPerThread; i < LoopRange; ++i) {
         Store = _mm256_fmadd_pd(VectSrc1[i], VectSrc2[i], Store);
     }
 
@@ -127,8 +127,8 @@ void DotProductMachineChunked<float>::StartThread(const unsigned ThreadID) {
     const auto VectSrc2 = (__m256*) Src2;
     __m256 Store = _mm256_set_ps(0, 0, 0, 0, 0, 0, 0, 0);
 
-    const unsigned long LoopRange = (ThreadID + 1) * ElemPerThread;
-    for (unsigned long i = ThreadID * ElemPerThread; i < LoopRange; ++i) {
+    const size_t LoopRange = (ThreadID + 1) * ElemPerThread;
+    for (size_t i = ThreadID * ElemPerThread; i < LoopRange; ++i) {
         Store = _mm256_fmadd_ps(VectSrc1[i], VectSrc2[i], Store);
     }
 
@@ -141,14 +141,14 @@ void DotProductMachineChunked<float>::StartThread(const unsigned ThreadID) {
 #define PER_CIRCLE_FLOAT 2
 
 template<>
-DotProductMachineComb<double>::DotProductMachineComb(const double* const Src1, const double* const Src2, const unsigned Threads, const unsigned long Range) :
+DotProductMachineComb<double>::DotProductMachineComb(const double* const Src1, const double* const Src2, const unsigned Threads, const size_t Range) :
         DPMCore<double>(Src1, Src2, Threads, Range,
                         (((Range / DOUBLE_VECTOR_LENGTH) * DOUBLE_VECTOR_LENGTH) / PER_ITERATION_DOUBLE) * (CACHE_LINE / PER_ITERATION_DOUBLE)), LoopRange{Range / DOUBLE_VECTOR_LENGTH },
         PerCircle{PER_ITERATION_DOUBLE }
 {}
 
 template<>
-DotProductMachineComb<float>::DotProductMachineComb(const float* const Src1, const float* const Src2, const unsigned Threads, const unsigned long Range) :
+DotProductMachineComb<float>::DotProductMachineComb(const float* const Src1, const float* const Src2, const unsigned Threads, const size_t Range) :
         DPMCore<float>(Src1, Src2, Threads, Range, (((Range / SINGLE_VECTOR_LENGTH) * SINGLE_VECTOR_LENGTH) / PER_CIRCLE_FLOAT) * PER_CIRCLE_FLOAT), LoopRange{Range / SINGLE_VECTOR_LENGTH },
         PerCircle{ PER_CIRCLE_FLOAT }
 {}
@@ -191,10 +191,10 @@ void DotProductMachineComb<float>::StartThread(const unsigned ThreadID)
     const auto VectSrc2 = ((const __m256*) Src2) + PerCircle * ThreadID;
     __m256 Store = _mm256_set_ps(0, 0, 0, 0, 0, 0, 0, 0);
 
-    const unsigned long Jump = Threads * PerCircle;
+    const size_t Jump = Threads * PerCircle;
     Counter.arrive_and_wait();
 
-    for (unsigned long i = 0; i < LoopRange; i += Jump) {
+    for (size_t i = 0; i < LoopRange; i += Jump) {
         SingleOP_F(0);
         SingleOP_F(1);
     }
@@ -212,3 +212,8 @@ void DotProductMachineComb<float>::StartThread(const unsigned ThreadID)
 }
 
 #endif // __AVX__ __FMA__
+
+// ------------------------------------------
+// Outer product Implementation
+// ------------------------------------------
+

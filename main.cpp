@@ -8,8 +8,8 @@
 #include "Include/Wrappers/OptimalOperations.hpp"
 
 //#define DebugSumProd
-#define DebugMatrix1
-//#define DebugVectors1
+//#define DebugMatrix1
+#define DebugVectors1
 
 #ifdef DebugSumProd
 
@@ -34,11 +34,15 @@ int main(){
 
 
 using typior = double;
-size_t length;
+size_t length = 40000;
 
 int main() {
-    Vect V1(length,(typior)1);
-    Vect V2(length,(typior)6);
+    PerformOPTest<double, [](size_t) -> DPack { return { length, length, length }; }>(1600000000, 10, 0, true, true);
+//    Vect V1(length, (double)1, false);
+//    Vect V2(length, (double)65, true);
+//
+//    auto M3 = GetOuterProduct(V1, V2);
+
 }
 
 #elif defined DebugMatrix1

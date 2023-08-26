@@ -61,7 +61,7 @@ inline void GPMM<double>::CCKernelXx6(const size_t HorizontalCord, const size_t 
     const double* VectCoef4 = VectCoef3 + MatBSoL;
     const double* VectCoef5 = VectCoef4 + MatBSoL;
 
-    constexpr size_t LoopRange = 240; //min(Dim2, Dim2Off + Dim2Part);
+    const size_t LoopRange = min(Dim2, Dim2Off + Dim2Part);
 
     for(size_t kk = Dim2Off; kk < LoopRange; ++kk){
         const double* UPtr = VectPartUpperPtr;
@@ -70,7 +70,6 @@ inline void GPMM<double>::CCKernelXx6(const size_t HorizontalCord, const size_t 
 
         VectPartBuffUpper = _mm256_load_pd(UPtr);
         VectPartBuffLower = _mm256_load_pd(LPtr);
-
 
 #ifndef __clang__
         __builtin_prefetch(UPtr + MatASoL);

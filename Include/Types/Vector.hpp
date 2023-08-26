@@ -31,8 +31,8 @@ class Vector
 #endif
 {
 protected:
-    static constexpr unsigned ElementsPerCacheLine = CACHE_LINE / sizeof(NumType);
-    unsigned long Size;
+    static constexpr size_t ElementsPerCacheLine = CACHE_LINE / sizeof(NumType);
+    size_t Size;
 	bool IsHorizontal;
 	const ResourceManager* MM;
     NumType* Array;
@@ -55,14 +55,14 @@ protected:
 public:
 	void MoveToArray(std::initializer_list<NumType> Init);
 
-	Vector(unsigned long Size, bool IsHorizontal = true, ResourceManager* MM = DefaultMM) noexcept:
+	Vector(size_t Size, bool IsHorizontal = false, ResourceManager* MM = DefaultMM) noexcept:
 		Size{ Size }, IsHorizontal{ IsHorizontal }, MM{ MM }
 	{
         CheckForIncorrectSize();
 		AllocateArray();
 	}
 
-	Vector(unsigned long Size, NumType InitVal, bool IsHorizontal = true, ResourceManager* MM = DefaultMM) noexcept:
+	Vector(size_t Size, NumType InitVal, bool IsHorizontal = false, ResourceManager* MM = DefaultMM) noexcept:
 		Size{ Size }, IsHorizontal{ IsHorizontal }, MM{ MM }
 	{
         CheckForIncorrectSize();
@@ -70,7 +70,7 @@ public:
 		SetWholeData(InitVal);
 	}
 
-	Vector(std::initializer_list<NumType> Init, bool IsHorizontal = true, ResourceManager* MM = DefaultMM) noexcept:
+	Vector(std::initializer_list<NumType> Init, bool IsHorizontal = false, ResourceManager* MM = DefaultMM) noexcept:
 		Size{ Init.size() }, IsHorizontal{ IsHorizontal }, MM{ MM }
 	{
         CheckForIncorrectSize();
@@ -91,20 +91,20 @@ public:
 		Target.Array = nullptr;
 	}
 
-	Vector(unsigned long Size, NumType* Init, bool IsHorizontal = true, ResourceManager* MM = DefaultMM) noexcept:
+	Vector(size_t Size, NumType* Init, bool IsHorizontal = false, ResourceManager* MM = DefaultMM) noexcept:
 		Size{ Size }, IsHorizontal{ IsHorizontal }, MM{ MM }, Array{ Init }
 	{
         CheckForIncorrectSize();
         AbandonIfNull(Init);
 	}
 
-	Vector(unsigned long Size, const NumType* Init, bool IsHorizontal = true, ResourceManager* MM = DefaultMM) :
+	Vector(size_t Size, const NumType* Init, bool IsHorizontal = false, ResourceManager* MM = DefaultMM) :
 		Size{ Size }, IsHorizontal{ IsHorizontal }, MM{ MM }
 	{
         CheckForIncorrectSize();
 		AllocateArray();
 
-		for (unsigned long i = 0; i < Size; ++i) {
+		for (size_t i = 0; i < Size; ++i) {
 			Array[i] = Init[i];
 		}
 	}
@@ -115,17 +115,13 @@ public:
 
 	Vector& operator=(const Vector& x);
 	Vector& operator=(Vector&& x) noexcept;
-    inline unsigned long GetSize() const { return Size; }
+    inline size_t GetSize() const { return Size; }
 	inline bool GetIsHorizontal() const { return IsHorizontal; }
 	inline NumType* GetArray() const { return Array; }
-	inline NumType* GetArray() { return Array; }
-	inline void ChangePosition() { IsHorizontal = !IsHorizontal; }
+	inline void Transpose() { IsHorizontal = !IsHorizontal; }
 
-	inline NumType& operator[](unsigned long x) { return Array[x]; }
-	inline const NumType& operator[](unsigned long x) const { return Array[x]; }
-
-	// Printing Vectors
-
+	inline NumType& operator[](size_t x) { return Array[x]; }
+	inline const NumType& operator[](size_t x) const { return Array[x]; }
 private:
 	void PrintHorizontally(std::ostream& out) const;
 	void PrintVertically(std::ostream& out) const;
@@ -236,10 +232,11 @@ public:
 
 	Vector GetModified(NumType(*func)(NumType x)) const {
 		Vector RetVal = *this;
-        ApplyOnDataEffect<func>();
-
+        RetVal.ApplyOnDataEffect<func>();
 		return RetVal;
 	}
+
+
 private:
     template<unsigned ThreadCap, unsigned (*Decider)(unsigned long long)>
 	friend NumType DotProduct(const Vector& a, const Vector& b);
@@ -287,7 +284,7 @@ void Vector<float>::reciprocal();
 
 template<typename NumType>
 bool Vector<NumType>::CheckForIntegrity(NumType *Val, bool verbose) {
-    for (unsigned long i = 0; i < Size; ++i)
+    for (size_t i = 0; i < Size; ++i)
         if (Array[i] != Val[i]){
             if (verbose) std::cerr << "[ERROR] Integrity test failed on Index: " << i << '\n';
             return false;
@@ -299,7 +296,7 @@ bool Vector<NumType>::CheckForIntegrity(NumType *Val, bool verbose) {
 
 template<typename NumType>
 bool Vector<NumType>::CheckForIntegrity(NumType Val, bool verbose) {
-    for (unsigned long i = 0; i < Size; ++i)
+    for (size_t i = 0; i < Size; ++i)
         if (Array[i] != Val) {
             if (verbose) std::cerr << "[ERROR] Integrity test failed on Index: " << i << '\n';
             return false;
@@ -323,7 +320,7 @@ void Vector<NumType>::SetWholeData(NumType Val)
 #endif
     }
     else {
-        for (unsigned long i = 0; i < Size; ++i)
+        for (size_t i = 0; i < Size; ++i)
             Array[i] = Val;
     }
 }
@@ -373,7 +370,7 @@ void Vector<NumType>::MoveToArray(std::initializer_list<NumType> Init) {
 
     const NumType* Matrix = std::data(Init);
 
-    for (unsigned long i = 0; i < Size; ++i)
+    for (size_t i = 0; i < Size; ++i)
         Array[i] = Matrix[i];
 }
 
@@ -405,15 +402,15 @@ Vector<NumType> &Vector<NumType>::operator=(const Vector &x) {
 
 template<typename NumType>
 void Vector<NumType>::PrintHorizontally(std::ostream &out) const {
-    unsigned long MaxPerCol = FindConsoleWidth() / 6;
+    size_t MaxPerCol = FindConsoleWidth() / 6;
 
     out << std::fixed << std::setprecision(3);
 
-    for (unsigned long i = 0; i + MaxPerCol <= Size; i+=MaxPerCol) {
+    for (size_t i = 0; i + MaxPerCol <= Size; i+=MaxPerCol) {
         out << "Vector values within index range: " << i << '-' << i + MaxPerCol
             << ':' << std::endl;
 
-        for (unsigned long j = 0; j < MaxPerCol; ++j) {
+        for (size_t j = 0; j < MaxPerCol; ++j) {
             out << Array[i+j] << ' ';
         }
 
@@ -424,7 +421,7 @@ void Vector<NumType>::PrintHorizontally(std::ostream &out) const {
 template<typename NumType>
 void Vector<NumType>::PrintVertically(std::ostream &out) const {
     out << std::endl;
-    for (unsigned long i = 0; i < Size; ++i)
+    for (size_t i = 0; i < Size; ++i)
         out << Array[i] << '\n';
     out << std::endl;
 }
