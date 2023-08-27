@@ -223,117 +223,56 @@ class OPM
 public:
     OPM(const NumType* VectA, const NumType* VectB, NumType* MatC, size_t ASize,
         size_t BSize, size_t MatCSoL, bool IsHor = false);
-    inline void Perform(){
-        const size_t Range = (CoefSize / ElementsPerCacheLine) * ElementsPerCacheLine;
-        for (size_t i = 0; i < Range; i += ElementsPerCacheLine) {
-            for (size_t j = 0; j < VectSize; ++j) {
-                MatC[i * MatCSoL + j] = VectPtr[j] * CoefPtr[i];
-                MatC[(i + 1) * MatCSoL + j] = VectPtr[j] * CoefPtr[i + 1];
-                MatC[(i + 2) * MatCSoL + j] = VectPtr[j] * CoefPtr[i + 2];
-                MatC[(i + 3) * MatCSoL + j] = VectPtr[j] * CoefPtr[i + 3];
-                MatC[(i + 4) * MatCSoL + j] = VectPtr[j] * CoefPtr[i + 4];
-                MatC[(i + 5) * MatCSoL + j] = VectPtr[j] * CoefPtr[i + 5];
-                MatC[(i + 6) * MatCSoL + j] = VectPtr[j] * CoefPtr[i + 6];
-                MatC[(i + 7) * MatCSoL + j] = VectPtr[j] * CoefPtr[i + 7];
-            }
-        }
-
-        for(size_t  j = 0; j < VectSize; ++j) {
-            for (size_t i = Range; i < CoefSize; ++i) {
-                MatC[i * MatCSoL + j] = VectPtr[j] * CoefPtr[i];
-            }
-        }
-    }
-
-private:
-
-#ifdef __AVX__
-    inline void AVXOPM(){}
-#endif
+    inline void Perform();
 };
 
-#ifdef __AVX__
+// ------------------------------------------
+// Vector X Matrix Multiplication
+// ------------------------------------------
+
+template<typename NumType>
+class VMM{
+    const NumType* const MatA;
+    const NumType* const VectB;
+    NumType* const VectC;
+
+    const size_t MatARows;
+    const size_t MatACols;
+    const size_t MatASoL;
+    const bool IsMatHor;
+    void RMVKernel12x4(size_t HorizontalCord, size_t VerticalCord) {};
+    void CMVKernel12x4(size_t HorizontalCord, size_t VerticalCord) {};
+    inline void PerformCVM();
+    inline void PerformRVM() {};
+    inline void PerformCMV();
+    inline void PerformRMV();
+public:
+    VMM(const NumType* MatA, const NumType* VectB, NumType* VectC, size_t MatARows, size_t MatACols, size_t MatASoL, bool IsHor);
+    void PerformVM(){
+        if (IsMatHor) PerformRVM();
+        else PerformCVM();
+    }
+    void PerformMV(){
+        if (IsMatHor) PerformRMV();
+        else PerformCMV();
+    }
+};
+
+#if defined(__AVX__) && defined(__FMA__)
+
 template<>
-inline void OPM<double>::Perform()
-#define LoadAvx(double_ptr) *(__m256d*)double_ptr
-{
-    const size_t CoefRange = (CoefSize / ElementsPerCacheLine) * ElementsPerCacheLine;
-    const double *CoefPtrIter = CoefPtr;
+void VMM<double>::PerformCMV();
 
-    #pragma omp parallel for
-    for (size_t i = 0; i < CoefRange; i += ElementsPerCacheLine) {
-        __m256d CoefBuff0 = _mm256_set1_pd(*(CoefPtrIter));
-        __m256d CoefBuff1 = _mm256_set1_pd(*(CoefPtrIter + 1));
-        __m256d CoefBuff2 = _mm256_set1_pd(*(CoefPtrIter + 2));
-        __m256d CoefBuff3 = _mm256_set1_pd(*(CoefPtrIter + 3));
-        __m256d CoefBuff4 = _mm256_set1_pd(*(CoefPtrIter + 4));
-        __m256d CoefBuff5 = _mm256_set1_pd(*(CoefPtrIter + 5));
-        __m256d CoefBuff6 = _mm256_set1_pd(*(CoefPtrIter + 6));
-        __m256d CoefBuff7 = _mm256_set1_pd(*(CoefPtrIter + 7));
-        CoefPtrIter += ElementsPerCacheLine;
+template<>
+void VMM<double>::PerformRMV();
 
-        const double *VectPtrIter = VectPtr;
-        for (size_t j = 0; j < VectSize; j += ElementsPerCacheLine) {
-            __m256d VectA0 = _mm256_load_pd(VectPtrIter);
-            __m256d VectA1 = _mm256_load_pd(VectPtrIter + DOUBLE_VECTOR_LENGTH);
-            VectPtrIter += ElementsPerCacheLine;
+template<>
+void VMM<double>::RMVKernel12x4(size_t HorizontalCord, size_t VerticalCord);
 
-            double *TargetFirstPtr0 = MatC + i * MatCSoL + j;
-            double *TargetSecondPtr0 = MatC + i * MatCSoL + j + DOUBLE_VECTOR_LENGTH;
-            double *TargetFirstPtr1 = MatC + (i + 2) * MatCSoL + j;
-            double *TargetSecondPtr1 = MatC + (i + 2) * MatCSoL + j + DOUBLE_VECTOR_LENGTH;
-            double *TargetFirstPtr2 = MatC + (i + 4) * MatCSoL + j;
-            double *TargetSecondPtr2 = MatC + (i + 4) * MatCSoL + j + DOUBLE_VECTOR_LENGTH;
-            double *TargetFirstPtr3 = MatC + (i + 6) * MatCSoL + j;
-            double *TargetSecondPtr3 = MatC + (i + 6) * MatCSoL + j + DOUBLE_VECTOR_LENGTH;
-            LoadAvx(TargetFirstPtr0) = _mm256_mul_pd(VectA0, CoefBuff0);
-            LoadAvx(TargetSecondPtr0) = _mm256_mul_pd(VectA1, CoefBuff0);
-            LoadAvx(TargetFirstPtr1) = _mm256_mul_pd(VectA0, CoefBuff2);
-            LoadAvx(TargetSecondPtr1) = _mm256_mul_pd(VectA1, CoefBuff2);
-            LoadAvx(TargetFirstPtr2) = _mm256_mul_pd(VectA0, CoefBuff4);
-            LoadAvx(TargetSecondPtr2) = _mm256_mul_pd(VectA1, CoefBuff4);
-            LoadAvx(TargetFirstPtr3) = _mm256_mul_pd(VectA0, CoefBuff6);
-            LoadAvx(TargetSecondPtr3) = _mm256_mul_pd(VectA1, CoefBuff6);
-            TargetSecondPtr0 += MatCSoL;
-            TargetFirstPtr0 += MatCSoL;
-            TargetFirstPtr1 += MatCSoL;
-            TargetSecondPtr1 += MatCSoL;
-            TargetFirstPtr2 += MatCSoL;
-            TargetSecondPtr2 += MatCSoL;
-            TargetFirstPtr3 += MatCSoL;
-            TargetSecondPtr3 += MatCSoL;
-            LoadAvx(TargetFirstPtr0) = _mm256_mul_pd(VectA0, CoefBuff1);
-            LoadAvx(TargetSecondPtr0) = _mm256_mul_pd(VectA1, CoefBuff1);
-            LoadAvx(TargetFirstPtr1) = _mm256_mul_pd(VectA0, CoefBuff3);
-            LoadAvx(TargetSecondPtr1) = _mm256_mul_pd(VectA1, CoefBuff3);
-            LoadAvx(TargetFirstPtr2) = _mm256_mul_pd(VectA0, CoefBuff5);
-            LoadAvx(TargetSecondPtr2) = _mm256_mul_pd(VectA1, CoefBuff5);
-            LoadAvx(TargetFirstPtr3) = _mm256_mul_pd(VectA0, CoefBuff7);
-            LoadAvx(TargetSecondPtr3) = _mm256_mul_pd(VectA1, CoefBuff7);
-        }
-    }
+template<>
+void VMM<double>::CMVKernel12x4(size_t HorizontalCord, size_t VerticalCord);
 
-    const size_t CleaningRange = CoefSize - CoefRange;
-    __m256d Buffers[ElementsPerCacheLine];
-    for (size_t i = 0; i < CleaningRange; i++) {
-        Buffers[i] = _mm256_set1_pd(CoefPtr[CoefRange + i]);
-    }
-
-    for (size_t j = 0; j < VectSize; j += ElementsPerCacheLine) {
-        __m256d VectFirst = _mm256_load_pd(VectPtr + j);
-        __m256d VectSecond = _mm256_load_pd(VectPtr + j + DOUBLE_VECTOR_LENGTH);
-
-        for (size_t i = 0; i < CleaningRange; i++)
-#define CleaningTargetUpper MatC + (i + CoefRange) * MatCSoL + j
-#define CleaningTargetLower MatC + (i + CoefRange) * MatCSoL + j + DOUBLE_VECTOR_LENGTH
-        {
-            _mm256_store_pd(CleaningTargetUpper, _mm256_mul_pd(VectFirst, Buffers[i]));
-            _mm256_store_pd(CleaningTargetLower, _mm256_mul_pd(VectSecond, Buffers[i]));
-        }
-    }
-}
-
-#endif // __AVX__
+#endif
 
 // ------------------------------------------
 // Matrix Sum Implementation
@@ -692,5 +631,187 @@ OPM<NumType>::OPM(const NumType *VectA, const NumType *VectB, NumType *MatC, siz
     }
 }
 
+
+template<typename NumType>
+void OPM<NumType>::Perform() {
+    const size_t Range = (CoefSize / ElementsPerCacheLine) * ElementsPerCacheLine;
+    for (size_t i = 0; i < Range; i += ElementsPerCacheLine) {
+        for (size_t j = 0; j < VectSize; ++j) {
+            MatC[i * MatCSoL + j] = VectPtr[j] * CoefPtr[i];
+            MatC[(i + 1) * MatCSoL + j] = VectPtr[j] * CoefPtr[i + 1];
+            MatC[(i + 2) * MatCSoL + j] = VectPtr[j] * CoefPtr[i + 2];
+            MatC[(i + 3) * MatCSoL + j] = VectPtr[j] * CoefPtr[i + 3];
+            MatC[(i + 4) * MatCSoL + j] = VectPtr[j] * CoefPtr[i + 4];
+            MatC[(i + 5) * MatCSoL + j] = VectPtr[j] * CoefPtr[i + 5];
+            MatC[(i + 6) * MatCSoL + j] = VectPtr[j] * CoefPtr[i + 6];
+            MatC[(i + 7) * MatCSoL + j] = VectPtr[j] * CoefPtr[i + 7];
+        }
+    }
+
+    for(size_t  j = 0; j < VectSize; ++j) {
+        for (size_t i = Range; i < CoefSize; ++i) {
+            MatC[i * MatCSoL + j] = VectPtr[j] * CoefPtr[i];
+        }
+    }
+}
+
+#ifdef __AVX__
+template<>
+inline void OPM<double>::Perform()
+#define LoadAvx(double_ptr) *(__m256d*)double_ptr
+{
+    const size_t CoefRange = (CoefSize / ElementsPerCacheLine) * ElementsPerCacheLine;
+    const double *CoefPtrIter = CoefPtr;
+
+#pragma omp parallel for
+    for (size_t i = 0; i < CoefRange; i += ElementsPerCacheLine) {
+        __m256d CoefBuff0 = _mm256_set1_pd(*(CoefPtrIter));
+        __m256d CoefBuff1 = _mm256_set1_pd(*(CoefPtrIter + 1));
+        __m256d CoefBuff2 = _mm256_set1_pd(*(CoefPtrIter + 2));
+        __m256d CoefBuff3 = _mm256_set1_pd(*(CoefPtrIter + 3));
+        __m256d CoefBuff4 = _mm256_set1_pd(*(CoefPtrIter + 4));
+        __m256d CoefBuff5 = _mm256_set1_pd(*(CoefPtrIter + 5));
+        __m256d CoefBuff6 = _mm256_set1_pd(*(CoefPtrIter + 6));
+        __m256d CoefBuff7 = _mm256_set1_pd(*(CoefPtrIter + 7));
+        CoefPtrIter += ElementsPerCacheLine;
+
+        const double *VectPtrIter = VectPtr;
+        for (size_t j = 0; j < VectSize; j += ElementsPerCacheLine) {
+            __m256d VectA0 = _mm256_load_pd(VectPtrIter);
+            __m256d VectA1 = _mm256_load_pd(VectPtrIter + DOUBLE_VECTOR_LENGTH);
+            VectPtrIter += ElementsPerCacheLine;
+
+            double *TargetFirstPtr0 = MatC + i * MatCSoL + j;
+            double *TargetSecondPtr0 = MatC + i * MatCSoL + j + DOUBLE_VECTOR_LENGTH;
+            double *TargetFirstPtr1 = MatC + (i + 2) * MatCSoL + j;
+            double *TargetSecondPtr1 = MatC + (i + 2) * MatCSoL + j + DOUBLE_VECTOR_LENGTH;
+            double *TargetFirstPtr2 = MatC + (i + 4) * MatCSoL + j;
+            double *TargetSecondPtr2 = MatC + (i + 4) * MatCSoL + j + DOUBLE_VECTOR_LENGTH;
+            double *TargetFirstPtr3 = MatC + (i + 6) * MatCSoL + j;
+            double *TargetSecondPtr3 = MatC + (i + 6) * MatCSoL + j + DOUBLE_VECTOR_LENGTH;
+            LoadAvx(TargetFirstPtr0) = _mm256_mul_pd(VectA0, CoefBuff0);
+            LoadAvx(TargetSecondPtr0) = _mm256_mul_pd(VectA1, CoefBuff0);
+            LoadAvx(TargetFirstPtr1) = _mm256_mul_pd(VectA0, CoefBuff2);
+            LoadAvx(TargetSecondPtr1) = _mm256_mul_pd(VectA1, CoefBuff2);
+            LoadAvx(TargetFirstPtr2) = _mm256_mul_pd(VectA0, CoefBuff4);
+            LoadAvx(TargetSecondPtr2) = _mm256_mul_pd(VectA1, CoefBuff4);
+            LoadAvx(TargetFirstPtr3) = _mm256_mul_pd(VectA0, CoefBuff6);
+            LoadAvx(TargetSecondPtr3) = _mm256_mul_pd(VectA1, CoefBuff6);
+            TargetSecondPtr0 += MatCSoL;
+            TargetFirstPtr0 += MatCSoL;
+            TargetFirstPtr1 += MatCSoL;
+            TargetSecondPtr1 += MatCSoL;
+            TargetFirstPtr2 += MatCSoL;
+            TargetSecondPtr2 += MatCSoL;
+            TargetFirstPtr3 += MatCSoL;
+            TargetSecondPtr3 += MatCSoL;
+            LoadAvx(TargetFirstPtr0) = _mm256_mul_pd(VectA0, CoefBuff1);
+            LoadAvx(TargetSecondPtr0) = _mm256_mul_pd(VectA1, CoefBuff1);
+            LoadAvx(TargetFirstPtr1) = _mm256_mul_pd(VectA0, CoefBuff3);
+            LoadAvx(TargetSecondPtr1) = _mm256_mul_pd(VectA1, CoefBuff3);
+            LoadAvx(TargetFirstPtr2) = _mm256_mul_pd(VectA0, CoefBuff5);
+            LoadAvx(TargetSecondPtr2) = _mm256_mul_pd(VectA1, CoefBuff5);
+            LoadAvx(TargetFirstPtr3) = _mm256_mul_pd(VectA0, CoefBuff7);
+            LoadAvx(TargetSecondPtr3) = _mm256_mul_pd(VectA1, CoefBuff7);
+        }
+    }
+
+    const size_t CleaningRange = CoefSize - CoefRange;
+    __m256d Buffers[ElementsPerCacheLine];
+    for (size_t i = 0; i < CleaningRange; i++) {
+        Buffers[i] = _mm256_set1_pd(CoefPtr[CoefRange + i]);
+    }
+
+    for (size_t j = 0; j < VectSize; j += ElementsPerCacheLine) {
+        __m256d VectFirst = _mm256_load_pd(VectPtr + j);
+        __m256d VectSecond = _mm256_load_pd(VectPtr + j + DOUBLE_VECTOR_LENGTH);
+
+        for (size_t i = 0; i < CleaningRange; i++)
+#define CleaningTargetUpper MatC + (i + CoefRange) * MatCSoL + j
+#define CleaningTargetLower MatC + (i + CoefRange) * MatCSoL + j + DOUBLE_VECTOR_LENGTH
+        {
+            _mm256_store_pd(CleaningTargetUpper, _mm256_mul_pd(VectFirst, Buffers[i]));
+            _mm256_store_pd(CleaningTargetLower, _mm256_mul_pd(VectSecond, Buffers[i]));
+        }
+    }
+}
+
+#endif
+
+// ------------------------------------------
+// Matrix and Vector Multiplication Implementation
+// ------------------------------------------
+
+template<typename NumType>
+VMM<NumType>::VMM(const NumType *MatA, const NumType *VectB, NumType *VectC, size_t MatARows, size_t MatACols,
+                  size_t MatASoL, bool IsHor) :
+    MatA{ MatA }, VectB{ VectB }, VectC { VectC }, MatARows{ MatARows }, MatACols { MatACols },
+    MatASoL{ MatASoL }, IsMatHor { IsHor }
+{
+
+}
+
+template<typename NumType>
+void VMM<NumType>::PerformCMV() {
+    const size_t Range = (MatARows / 4) * 4;
+
+    for(size_t i = 0; i < Range; i+=4){
+        NumType acc0 = 0;
+        NumType acc1 = 0;
+        NumType acc2 = 0;
+        NumType acc3 = 0;
+        for(size_t j = 0; j < MatACols; ++j){
+            acc0 += MatA[j * MatASoL + i] * VectB[j];
+            acc1 += MatA[j * MatASoL + i + 1] * VectB[j];
+            acc2 += MatA[j * MatASoL + i + 2] * VectB[j];
+            acc3 += MatA[j * MatASoL + i + 3] * VectB[j];
+        }
+        VectC[i] = acc0;
+        VectC[i + 1] = acc1;
+        VectC[i + 2] = acc2;
+        VectC[i + 3] = acc3;
+    }
+
+    if (Range == MatARows) return;
+    // Otherwise, perform cleaning of rows, which are not packable in fours
+
+    NumType Accumulators[4] = { 0 };
+    const size_t CleaningRange = MatARows - Range;
+    for (size_t j = 0; j < MatACols; ++j){
+        for(size_t i = 0; i < CleaningRange; ++i){
+            Accumulators[i] += MatA[j * MatASoL + Range + i] * VectB[j];
+        }
+    }
+
+    for(size_t i = 0; i < CleaningRange; ++i){
+        VectC[Range + i] = Accumulators[i];
+    }
+}
+template<typename NumType>
+void VMM<NumType>::PerformRMV() {
+    for(size_t i = 0; i < MatARows; i+=4){
+        NumType acc0 = 0;
+        NumType acc1 = 0;
+        NumType acc2 = 0;
+        NumType acc3 = 0;
+        for(size_t j = 0; j < MatACols; ++j){
+            acc0 += MatA[i * MatASoL + j] * VectB[j];
+            acc1 += MatA[(i + 1) * MatASoL + j] * VectB[j];
+            acc2 += MatA[(i + 2) * MatASoL + j] * VectB[j];
+            acc3 += MatA[(i + 3) * MatASoL + j] * VectB[j];
+        }
+        VectC[i] = acc0;
+        VectC[i + 1] = acc1;
+        VectC[i + 2] = acc2;
+        VectC[i + 3] = acc3;
+    }
+
+    // Cleaning is not necessary, if there is no memory optimization, due to alignment
+}
+
+template<typename NumType>
+void VMM<NumType>::PerformCVM() {
+
+}
 
 #endif // PARALLELNUM_NUMERICAL_CORE_H_

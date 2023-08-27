@@ -16,6 +16,7 @@
 #include "Vector.hpp"
 #include "../Operations/MatrixMultiplication.hpp"
 
+// TODO OPISY
 template<typename NumType>
 class Matrix1;
 
@@ -24,6 +25,9 @@ inline Matrix1<NumType> GetOuterProduct(const Vector<NumType>& A, const Vector<N
 
 template<typename NumT>
 inline OPM<NumT> GetOPM(const Vector<NumT>& A, const Vector<NumT>& B, Matrix1<NumT>& C, bool IsHor);
+
+template<typename NumT>
+inline VMM<NumT> GetVMM(const Matrix1<NumT>& Mat, const Vector<NumT>& Vect, Vector<NumT>& RetVect);
 
 template<typename NumType>
 class Matrix1 : public Vector<NumType>
@@ -62,16 +66,16 @@ class Matrix1 : public Vector<NumType>
 	const NumType& (Matrix1::* AccessFuncConst)(size_t, size_t) const;
 
 	void AbandonIfVector() const {
-		if (Rows == 1 || Cols == 1) {
-			exit(0xf2);
+		if (Rows == 1 || Cols == 1) [[unlikely]] {
+            throw std::runtime_error("[ERROR] Passed sizes to matrix constructor describes vector\n");
 		}
 	}
 
 	void PerformSanityChecks() const {
 		AbandonIfVector();
 
-		if (MatrixSize == 0) {
-			exit(0xf1);
+		if (MatrixSize == 0) [[unlikely]]{
+			throw std::runtime_error("[ERROR] One of passed matrix sizes was 0\n");
 		}
 	}
 
@@ -285,41 +289,61 @@ public:
 	friend Matrix1 operator+(const Matrix1& a, const Matrix1& b)
         // Threaded sum of matrices
     {
-        if (a.Rows != b.Rows || a.Cols != b.Cols)
-#ifdef _MSC_VER
-            throw std::exception("Wrong matrix size");
-#else
-            throw std::exception();
-#endif
+        if (a.Rows != b.Rows || a.Cols != b.Cols) [[unlikely]]
+            throw std::runtime_error("[ERROR] Not able to perform matrix sum, dimensions are not equal\n");
 
-        if (a.IsHorizontal != b.IsHorizontal) {
-            std::cerr << "Not matching Accessing types matrices - much slower operations\n\n";
-        }
-
-        // Solution A
         if (a.IsHorizontal == b.IsHorizontal )
             return MatrixSumSameAccess<ThreadCap, Decider>(a, b);
         else
             return MatrixSumDiffAccess<ThreadCap, Decider>(a, b);
     }
+
 private:
-
-
-public:
     template<typename NumT>
     friend inline GPMM<NumT> GetMultMachine(const Matrix1<NumT>& A, const Matrix1<NumT>& B, const Matrix1<NumT>& C){
         return GPMM<NumType>(A.Array, B.Array, C.Array, A.Rows, A.Cols, B.Cols, A.SizeOfLine, B.SizeOfLine, C.SizeOfLine,
                              A.IsHorizontal, B.IsHorizontal, C.IsHorizontal);
     }
 
+public:
     template<unsigned ThreadCap = 20, unsigned (*Decider)(unsigned long long) = LogarithmicThreads<ThreadCap>>
 	friend Matrix1 operator*(const Matrix1& A, const Matrix1& B){
-        if (A.Cols != B.Rows)
-            throw std::runtime_error("Not able to perform matrix multiplication - wrong matrix sizes\n");
+        if (A.Cols != B.Rows) [[unlikely2]]
+            throw std::runtime_error("[ERROR] Not able to perform matrix multiplication, wrong matrix sizes\n");
 
         Matrix1 RetVal(A.Rows, B.Cols, (NumType)0);
         GPMM<NumType> MultMachine = GetMultMachine(A,B,RetVal);
+        // TODO: Forward thredcap and decider
         MultMachine.ExecuteOperation();
+
+        return RetVal;
+    }
+
+private:
+    friend VMM<NumType> GetVMM<>(const Matrix1<NumType>& Mat, const Vector<NumType>& Vect, Vector<NumType>& RetVect);
+
+public:
+    template<unsigned ThreadCap = 20, unsigned (*Decider)(unsigned long long) = LogarithmicThreads<ThreadCap>>
+    friend Vector<NumType> operator*(const Matrix1& A, const Vector<NumType>& B){
+        if (B.GetIsHorizontal() || A.Cols != B.GetSize())[[unlikely]]
+            throw std::runtime_error("[ERROR] Not able to perform Vect and Matrix multiplication due to wrong sizes or dimensions\n");
+        Vector<NumType> RetVal(A.Rows, (NumType)0, false);
+
+        // TODO: Forward thredcap and decider
+        auto Machine = GetVMM(A, B, RetVal);
+        Machine.PerformMV();
+
+        return RetVal;
+    }
+
+    template<unsigned ThreadCap = 20, unsigned (*Decider)(unsigned long long) = LogarithmicThreads<ThreadCap>>
+    friend Vector<NumType> operator*(const Vector<NumType>& A, const Matrix1& B){
+        if (!A.GetIsHorizontal() || B.Rows != A.GetSize()) [[unlikely]]
+            throw std::runtime_error("[ERROR] Not able to perform Vect and Matrix multiplication due to wrong sizes or dimensions\n");
+        Vector<NumType> RetVal(B.Cols, (NumType)0, true);
+
+        auto Machine = GetVMM(B, A, RetVal);
+        Machine.PerformVM();
 
         return RetVal;
     }
@@ -347,6 +371,7 @@ public:
 
 template<typename NumType>
 void Matrix1<NumType>::OptimizeResourceManagement(NumType *InitVal)
+// TODO: remove initval - perf
 // Find optimal way to store the data, then prepares
 // Arrays to be used efficiently, needs variable Rows and Cols to operate
 {
@@ -426,8 +451,8 @@ Matrix1<NumType>::Matrix1(std::initializer_list<std::initializer_list<NumType>> 
     OptimizeResourceManagement();
 
     for (size_t i = 0; i < Lines; ++i) {
-        if (InitData[i].size() != ElementsPerLine)
-            exit(0xfc);
+        if (InitData[i].size() != ElementsPerLine) [[unlikely]]
+            throw std::runtime_error("[ERROR] One of passed lines has different size than others\n");
 
         const NumType* InternalData = std::data(InitData[i]);
         for (size_t j = 0; j < ElementsPerLine; ++j) {
@@ -499,7 +524,9 @@ Matrix1<NumType>::Matrix1(size_t NNSize, bool ByRow, ResourceManager *MM) noexce
 }
 
 template<typename NumType>
-void Matrix1<NumType>::MoveFromPointer(NumType *Src) {
+void Matrix1<NumType>::MoveFromPointer(NumType *Src)
+    // TODO: make different function for aligned and unaligned pointers
+{
     for (unsigned i = 0; i < Lines; ++i) {
         for (unsigned j = 0; j < ElementsPerLine; ++j)
             Array[i * SizeOfLine + j] = Src[i * ElementsPerLine + j];
@@ -533,7 +560,7 @@ bool Matrix1<NumType>::CheckForIntegrity(NumType *Val, bool verbose)
 {
     for (size_t i = 0; i < Lines; ++i)
         for (size_t j = 0; j < ElementsPerLine; ++j)
-            if (Array[i * SizeOfLine + j] != Val[i * ElementsPerLine + j]) {
+            if (Array[i * SizeOfLine + j] != Val[i * ElementsPerLine + j])[[unlikely]] {
                 if (verbose)std::cerr << "[ERROR] Integrity test failed on Line: "
                                       << i << " and offset: " << j << std::endl;
 
@@ -548,7 +575,7 @@ template<typename NumType>
 bool Matrix1<NumType>::CheckForIntegrity(NumType Val, bool verbose) {
     for (size_t i = 0; i < Lines; ++i)
         for (size_t j = 0; j < ElementsPerLine; ++j)
-            if (Array[i * SizeOfLine + j] != Val) {
+            if (Array[i * SizeOfLine + j] != Val) [[unlikely]] {
                 if (verbose)std::cerr << "[ERROR] Integrity test failed on Line: "
                                       << i << " and offset: " << j << std::endl;
                 return false;
@@ -562,7 +589,7 @@ bool Matrix1<NumType>::CheckForIntegrity(NumType Val, bool verbose) {
 
 template<typename NumType>
 Matrix1<NumType> &Matrix1<NumType>::operator=(const Matrix1 &x) {
-    if (this == &x) return *this;
+    if (this == &x) [[unlikely]] return *this;
 
     Rows = x.Rows;
     Cols = x.Cols;
@@ -608,6 +635,7 @@ void Matrix1<NumType>::PrintWhole(std::ostream &out) {
 
 template<typename NumType>
 void Matrix1<NumType>::PrintPartitioned(std::ostream &out, size_t MaxMatrixCols) {
+    // TODO: Humanity level crime
     size_t RowParts = Rows / 5;
     size_t ColParts = Cols / MaxMatrixCols;
     size_t i;
@@ -643,7 +671,7 @@ void Matrix1<NumType>::PrintPartitioned(std::ostream &out, size_t MaxMatrixCols)
 
 template<typename NumType>
 Matrix1<NumType> Matrix1<NumType>::GetTransposed() const
-// Get a transposed copy of this matrix, actually naive slow algorithm
+    // Get a transposed copy of this matrix, actually naive slow algorithm
 {
     Matrix1<NumType> RetVal(Cols, Rows, IsHorizontal, MM);
 
@@ -653,7 +681,9 @@ Matrix1<NumType> Matrix1<NumType>::GetTransposed() const
 }
 
 template<typename NumT>
-inline OPM<NumT> GetOPM(const Vector<NumT>& A, const Vector<NumT>& B, Matrix1<NumT>& C, bool IsHor){
+inline OPM<NumT> GetOPM(const Vector<NumT>& A, const Vector<NumT>& B, Matrix1<NumT>& C, bool IsHor)
+    // Wrapper for OuterProductMachine
+{
     return OPM<NumT>(A.GetArray(), B.GetArray(), C.Array, A.GetSize(), B.GetSize(), C.SizeOfLine, IsHor);
 }
 
@@ -670,5 +700,9 @@ Matrix1<NumT> GetOuterProduct(const Vector<NumT>& A, const Vector<NumT>& B, bool
     return RetVal;
 }
 
+template<typename NumT>
+VMM<NumT> GetVMM(const Matrix1<NumT> &Mat, const Vector<NumT> &Vect, Vector<NumT> &RetVect) {
+    return VMM<NumT>(Mat.GetArray(), Vect.GetArray(), RetVect.GetArray(), Mat.Rows, Mat.Cols, Mat.SizeOfLine, Mat.IsHorizontal);
+}
 
 #endif

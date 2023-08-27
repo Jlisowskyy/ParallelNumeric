@@ -42,17 +42,16 @@ protected:
 	void AllocateArray();
 	void DeallocateArray();
 
-#ifdef DEBUG_
-	virtual bool CheckForIntegrity(NumType Val, bool verbose);
-	virtual bool CheckForIntegrity(NumType* Val, bool verbose);
-#endif
-
 	// Used only for init_list<init_list> - unknown parameters
 	// Should not be used as a class constructor, may lead to unexpected problems
 	Vector(bool IsHorizontal, ResourceManager* MM) noexcept :
         Size{ 0 }, IsHorizontal{ IsHorizontal }, MM{ MM }, Array{ nullptr } {}
 
 public:
+#ifdef DEBUG_
+    virtual bool CheckForIntegrity(NumType Val, bool verbose);
+    virtual bool CheckForIntegrity(NumType* Val, bool verbose);
+#endif
 	void MoveToArray(std::initializer_list<NumType> Init);
 
 	Vector(size_t Size, bool IsHorizontal = false, ResourceManager* MM = DefaultMM) noexcept:
@@ -118,6 +117,7 @@ public:
     inline size_t GetSize() const { return Size; }
 	inline bool GetIsHorizontal() const { return IsHorizontal; }
 	inline NumType* GetArray() const { return Array; }
+    inline NumType* GetArray() { return Array; }
 	inline void Transpose() { IsHorizontal = !IsHorizontal; }
 
 	inline NumType& operator[](size_t x) { return Array[x]; }
@@ -285,7 +285,7 @@ void Vector<float>::reciprocal();
 template<typename NumType>
 bool Vector<NumType>::CheckForIntegrity(NumType *Val, bool verbose) {
     for (size_t i = 0; i < Size; ++i)
-        if (Array[i] != Val[i]){
+        if (Array[i] != Val[i]) [[unlikely]]{
             if (verbose) std::cerr << "[ERROR] Integrity test failed on Index: " << i << '\n';
             return false;
         }
@@ -296,8 +296,9 @@ bool Vector<NumType>::CheckForIntegrity(NumType *Val, bool verbose) {
 
 template<typename NumType>
 bool Vector<NumType>::CheckForIntegrity(NumType Val, bool verbose) {
+
     for (size_t i = 0; i < Size; ++i)
-        if (Array[i] != Val) {
+        if (Array[i] != Val) [[unlikely]] {
             if (verbose) std::cerr << "[ERROR] Integrity test failed on Index: " << i << '\n';
             return false;
         }
@@ -320,6 +321,7 @@ void Vector<NumType>::SetWholeData(NumType Val)
 #endif
     }
     else {
+#pragma omp parallel for
         for (size_t i = 0; i < Size; ++i)
             Array[i] = Val;
     }
@@ -327,24 +329,21 @@ void Vector<NumType>::SetWholeData(NumType Val)
 
 template<typename NumType>
 void Vector<NumType>::DeallocateArray() {
-    if (MM) {
-        //TODO
-    }
-    else {
+    if (!MM) [[likely]] {
 #ifdef OpSysWIN_
         _aligned_free(Array);
 #elif defined OpSysUNIX_
         free(Array);
 #endif
     }
+    else {
+        // TODO
+    }
 }
 
 template<typename NumType>
 void Vector<NumType>::AllocateArray() {
-    if (MM) {
-        //TODO
-    }
-    else {
+    if (!MM) {
         short tries = 5;
         Array = nullptr; // <------- Temp
         while(Array == nullptr && tries--){
@@ -358,24 +357,29 @@ void Vector<NumType>::AllocateArray() {
 
         AbandonIfNull(Array);
     }
+    else {
+        // TODO
+    }
 
 }
 
 template<typename NumType>
 void Vector<NumType>::MoveToArray(std::initializer_list<NumType> Init) {
-    if (Init.size() != Size)
+    if (Init.size() != Size) [[unlikely]]
         exit(0xff);
-    else if (Init.size() == 0)
+    else if (Init.size() == 0) [[unlikely]]
         exit(0xfe);
 
     const NumType* Matrix = std::data(Init);
 
+    #pragma omp parallel for
     for (size_t i = 0; i < Size; ++i)
         Array[i] = Matrix[i];
 }
 
 template<typename NumType>
 Vector<NumType> &Vector<NumType>::operator=(Vector &&x) noexcept {
+    if (this == &x) [[unlikely]] return *this;
     DeallocateArray();
 
     Size = x.Size;
@@ -388,7 +392,7 @@ Vector<NumType> &Vector<NumType>::operator=(Vector &&x) noexcept {
 
 template<typename NumType>
 Vector<NumType> &Vector<NumType>::operator=(const Vector &x) {
-    if (this == &x) return *this;
+    if (this == &x) [[unlikely]] return *this;
     DeallocateArray();
 
     Size = x.Size;

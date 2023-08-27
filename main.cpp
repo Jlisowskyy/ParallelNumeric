@@ -37,7 +37,8 @@ using typior = double;
 size_t length = 40000;
 
 int main() {
-    PerformOPTest<double, [](size_t) -> DPack { return { length, length, length }; }>(1600000000, 10, 0, true, true);
+    PerformVMMTest<double, [](size_t) -> DPack { return { 36000, 40960, length }; }>(1600000000, 20, 0, true, true);
+//    PerformOPTest<double, [](size_t) -> DPack { return { length, length, length }; }>(1600000000, 10, 0, true, true);
 //    Vect V1(length, (double)1, false);
 //    Vect V2(length, (double)65, true);
 //

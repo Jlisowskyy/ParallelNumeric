@@ -18,6 +18,8 @@
 
 // Compilation controllers
 #define DEBUG_
+
+// TODO: Not done yet not all operations adapt to this optimisation
 //#define OPTIMISE_MEM_
 
 using cun = const unsigned;

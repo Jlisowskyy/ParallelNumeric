@@ -9,6 +9,8 @@
 
 #include "../Wrappers/OptimalOperations.hpp"
 
+// TODO: replace with tuple
+// TODO: create template for all tests etc
 size_t GenerateNumber(size_t MinVal, size_t MaxVal) {
     return  (size_t)((3 * (double)rand() / (double)RAND_MAX) * (double)(MaxVal - MinVal)) + MinVal;
 }
@@ -148,6 +150,71 @@ bool PerformOPTest(size_t OperationCount, unsigned RunsToDo, long Seed = 0, bool
         }
 
         bool SuccessFlag = M.CheckForIntegrity(Val1 * Val2, Verbose);
+        if (SuccessFlag) ++SuccessfulRuns;
+    }
+
+    std::cout << "\n\nWith longest time: " << (double)LongestRun * 1e-9 << "(seconds)\nAnd shortest time: "
+              << (double)ShortestRun * 1e-9 << "(seconds)\nWith seed: " << Seed << std::endl;
+
+    bool SuccessFlag = SuccessfulRuns == RunsToDo;
+    if (Verbose) {
+        if (SuccessFlag) {
+            std::cout << "All runs were successful\n";
+        } else {
+            std::cout << "[ERROR] PROBLEM OCCURRED NOT ALL RUNS WERE SUCCESSFUL\n";
+        }
+    }
+    return SuccessFlag;
+}
+
+template <typename NumType = double , DPack(*GetDims)(size_t) = GenDims>
+bool PerformVMMTest(size_t OperationCount, unsigned RunsToDo, long Seed = 0, bool Verbose = false,
+                    bool IsMatHor = false, bool IsVectHor = false){
+    unsigned SuccessfulRuns = 0;
+    long long ShortestRun, LongestRun, LastRun;
+    Timer T1("Every Run Counter", false);
+
+    if (!Seed) {
+        srand(time(nullptr));
+    }
+    else srand(abs(Seed));
+
+    T1.CalculateAverageTime(RunsToDo, Verbose);
+
+    for (unsigned i = RunsToDo; i; --i) {
+        auto Val1 = (NumType)GenerateNumber(1, 100);
+        auto Val2 = (NumType)GenerateNumber(1, 25);
+        DPack d = GetDims(OperationCount);
+
+        // condition to meet vm mult requirements
+        Vector<NumType> V(IsVectHor ? d.dim1 : d.dim2, Val1, IsVectHor);
+        Matrix1<NumType> M(d.dim1, d.dim2, Val2, IsMatHor);
+//        Vector<NumType> result; TODO
+
+//        if (IsVectHor){ TODO
+//            T1.Start();
+//            result = V * M;
+//            LastRun = T1.Stop();
+//        }
+//        else{
+//            T1.Start();
+//            result = M * V;
+//            LastRun = T1.Stop();
+//        }
+
+        T1.Start();
+        auto result = M * V;
+        LastRun = T1.Stop();
+
+        if (i == RunsToDo) {
+            ShortestRun = LongestRun = LastRun;
+        }
+        else {
+            LongestRun = std::max(LastRun, LongestRun);
+            ShortestRun = std::min(LastRun, ShortestRun);
+        }
+
+        bool SuccessFlag = result.CheckForIntegrity(Val1 * Val2 * V.GetSize(), Verbose);
         if (SuccessFlag) ++SuccessfulRuns;
     }
 

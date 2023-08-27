@@ -3,7 +3,6 @@
 //
 
 #include "../Include/Operations/NumericalCore.hpp"
-#include "../Include/Maintenance/Debuggers.hpp"
 
 // -----------------------------------------
 // AVX specialisations
@@ -51,14 +50,6 @@ void MatrixSumHelperAlignedArrays(float *Target, const float *const Input1, cons
 }
 
 #endif // __AVX__
-
-// ---------------------------------------
-// Matrix multiplication
-// ---------------------------------------
-
-#if defined(__AVX__) && defined(__FMA__)
-
-#endif // __AVX__ __FMA__
 
 // ------------------------------------------
 // Dot product
@@ -214,6 +205,79 @@ void DotProductMachineComb<float>::StartThread(const unsigned ThreadID)
 #endif // __AVX__ __FMA__
 
 // ------------------------------------------
-// Outer product Implementation
+// Outer product AVX Implementation
 // ------------------------------------------
 
+// ------------------------------------------
+// Matrix x Vector Multiplication AVX Implementation
+// ------------------------------------------
+
+#if defined(__AVX__) && defined(__FMA__)
+
+static constexpr size_t HorizontalPartition = 2048;
+
+template<>
+void VMM<double>::RMVKernel12x4(const size_t HorizontalCord, const size_t VerticalCord){
+    __m256d ResVectBuff0 = _mm256_setzero_pd();
+    __m256d ResVectBuff1 = _mm256_setzero_pd();
+    __m256d ResVectBuff2 = _mm256_setzero_pd();
+    __m256d ResVectBuff3 = _mm256_setzero_pd();
+    __m256d ResVectBuff4 = _mm256_setzero_pd();
+    __m256d ResVectBuff5 = _mm256_setzero_pd();
+    __m256d ResVectBuff6 = _mm256_setzero_pd();
+    __m256d ResVectBuff7 = _mm256_setzero_pd();
+
+    const size_t Range = std::min(HorizontalCord + HorizontalPartition, MatACols);
+    for(size_t i = HorizontalCord; i < Range; i += 4)
+        #define LoadVectPart(offset) (__m256d)_mm256_stream_load_si256((__m256i*)(RefPtr + (VerticalCord + offset) * MatASoL))
+    {
+        const double* RefPtr = MatA + i;
+        __m256d CoefBuff = _mm256_load_pd(VectB + i);
+
+        ResVectBuff0 = _mm256_fmadd_pd(LoadVectPart(0), CoefBuff, ResVectBuff0);
+        ResVectBuff1 = _mm256_fmadd_pd(LoadVectPart(1), CoefBuff, ResVectBuff1);
+        ResVectBuff2 = _mm256_fmadd_pd(LoadVectPart(2), CoefBuff, ResVectBuff2);
+        ResVectBuff3 = _mm256_fmadd_pd(LoadVectPart(3), CoefBuff, ResVectBuff3);
+        ResVectBuff4 = _mm256_fmadd_pd(LoadVectPart(4), CoefBuff, ResVectBuff4);
+        ResVectBuff5 = _mm256_fmadd_pd(LoadVectPart(5), CoefBuff, ResVectBuff5);
+        ResVectBuff6 = _mm256_fmadd_pd(LoadVectPart(6), CoefBuff, ResVectBuff6);
+        ResVectBuff7 = _mm256_fmadd_pd(LoadVectPart(7), CoefBuff, ResVectBuff7);
+    }
+#define ToDouble(avx_obj) ((double*)(&avx_obj))
+#define ReturnDoubleAVXSum(avx_obj) ToDouble(avx_obj)[0] + ToDouble(avx_obj)[1] + ToDouble(avx_obj)[2] + ToDouble(avx_obj)[3]
+    VectC[VerticalCord] += ReturnDoubleAVXSum(ResVectBuff0);
+    VectC[VerticalCord + 1] += ReturnDoubleAVXSum(ResVectBuff1);
+    VectC[VerticalCord + 2] += ReturnDoubleAVXSum(ResVectBuff2);
+    VectC[VerticalCord + 3] += ReturnDoubleAVXSum(ResVectBuff3);
+    VectC[VerticalCord + 4] += ReturnDoubleAVXSum(ResVectBuff4);
+    VectC[VerticalCord + 5] += ReturnDoubleAVXSum(ResVectBuff5);
+    VectC[VerticalCord + 6] += ReturnDoubleAVXSum(ResVectBuff6);
+    VectC[VerticalCord + 7] += ReturnDoubleAVXSum(ResVectBuff7);
+}
+
+template<>
+void VMM<double>::PerformRMV(){
+    for(size_t i = 0; i < MatACols; i += HorizontalPartition){
+        for(size_t j = 0; j < MatARows; j += 1048552){
+            const size_t Range = std::min(MatARows, MatARows + 1048552);
+#pragma omp parallel for
+            for(size_t jj = j; jj < Range; jj += 8){
+                RMVKernel12x4(i, jj);
+            }
+        }
+    }
+}
+
+template<>
+void VMM<double>::CMVKernel12x4(size_t HorizontalCord, size_t VerticalCord){
+
+}
+
+template<>
+void VMM<double>::PerformCMV(){
+//    for(size_t i = 0; i < MatACols; i+= 2048){
+//        for(size_t j = 0; j < MatARows; j+=)
+//    }
+}
+
+#endif
