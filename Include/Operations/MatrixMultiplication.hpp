@@ -69,7 +69,7 @@ public:
          size_t MatASizeOfLine, size_t MatBSizeOfLine, size_t MatCSizeOfLine,
          bool IsAHorizontal, bool IsBHorizontal, bool IsCHorizontal);
 
-    template<unsigned ThreadCap = 20, unsigned (*Decider)(unsigned long long) = LogarithmicThreads<ThreadCap>>
+    template<size_t ThreadCap = 20, size_t (*Decider)(size_t) = LogarithmicThreads<ThreadCap>>
     void ExecuteOperation(){
         cull OpCount = Dim1 * Dim2 * Dim3;
         cun ThreadCount = Decider(OpCount);

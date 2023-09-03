@@ -22,12 +22,12 @@ void MatrixSumHelperAlignedArrays(double *Target, const double *const Input1, co
     const auto VectInput2 = (const __m256d*)Input2;
     auto VectTarget = (__m256d*)Target;
 
-    const unsigned long VectSize = Elements / DOUBLE_VECTOR_LENGTH;
+    const unsigned long VectSize = Elements / AVXInfo::f64Cap;
     for (size_t i = 0; i < VectSize; ++i) {
         VectTarget[i] = _mm256_add_pd(VectInput1[i], VectInput2[i]);
     }
 
-    for (size_t i = VectSize * DOUBLE_VECTOR_LENGTH; i < Elements; ++i) {
+    for (size_t i = VectSize * AVXInfo::f64Cap; i < Elements; ++i) {
         Target[i] = Input1[i] + Input2[i];
     }
 }
@@ -39,12 +39,12 @@ void MatrixSumHelperAlignedArrays(float *Target, const float *const Input1, cons
     const auto VectInput2 = (const __m256*)Input2;
     auto VectTarget = (__m256*)Target;
 
-    const size_t VectSize = Elements / SINGLE_VECTOR_LENGTH;
+    const size_t VectSize = Elements / AVXInfo::f32Cap;
     for (size_t i = 0; i < VectSize; ++i) {
         VectTarget[i] = _mm256_add_ps(VectInput1[i], VectInput2[i]);
     }
 
-    for (size_t i = VectSize * SINGLE_VECTOR_LENGTH; i < Elements; ++i) {
+    for (size_t i = VectSize * AVXInfo::f32Cap; i < Elements; ++i) {
         Target[i] = Input1[i] + Input2[i];
     }
 }
@@ -58,23 +58,67 @@ void MatrixSumHelperAlignedArrays(float *Target, const float *const Input1, cons
 #ifdef __AVX__
 
 template<>
-double DotProduct(double *const Src1, double *const Src2, size_t Range) {
-    const auto VectSrc1 = (__m256d*) Src1;
-    const auto VectSrc2 = (__m256d*) Src2;
-    __m256d Store = _mm256_set_pd(0, 0, 0, 0);
+double DotProduct(const double *const Src1, const double *const Src2, const size_t Range) {
+    const size_t VectRange = (Range / 32) * 32;
+    __m256d Acc0 = _mm256_setzero_pd();
+    __m256d Acc1 = _mm256_setzero_pd();
+    __m256d Acc2 = _mm256_setzero_pd();
+    __m256d Acc3 = _mm256_setzero_pd();
+    __m256d Acc4 = _mm256_setzero_pd();
+    __m256d Acc5 = _mm256_setzero_pd();
+    __m256d Acc6 = _mm256_setzero_pd();
+    __m256d Acc7 = _mm256_setzero_pd();
 
-    const size_t VectRange = Range/4;
-    for (size_t i = 0; i < VectRange; ++i) {
-        Store = _mm256_fmadd_pd(VectSrc1[i], VectSrc2[i], Store);
+    for (size_t i = 0; i < VectRange; i+=32) {
+        Acc0 = _mm256_fmadd_pd(
+                _mm256_load_pd(Src1 + i),
+                _mm256_load_pd(Src2 + i),
+                Acc0
+        );
+        Acc1 = _mm256_fmadd_pd(
+                _mm256_load_pd(Src1 + i + 4),
+                _mm256_load_pd(Src2 + i + 4),
+                Acc1
+        );
+        Acc2 = _mm256_fmadd_pd(
+                _mm256_load_pd(Src1 + i + 8),
+                _mm256_load_pd(Src2 + i + 8),
+                Acc2
+        );
+        Acc3 = _mm256_fmadd_pd(
+                _mm256_load_pd(Src1 + i + 12),
+                _mm256_load_pd(Src2 + i + 12),
+                Acc3
+        );
+        Acc4 = _mm256_fmadd_pd(
+                _mm256_load_pd(Src1 + i + 16),
+                _mm256_load_pd(Src2 + i + 16),
+                Acc4
+        );
+        Acc5 = _mm256_fmadd_pd(
+                _mm256_load_pd(Src1 + i + 20),
+                _mm256_load_pd(Src2 + i + 20),
+                Acc5
+        );
+        Acc6 = _mm256_fmadd_pd(
+                _mm256_load_pd(Src1 + i + 24),
+                _mm256_load_pd(Src2 + i + 24),
+                Acc6
+        );
+        Acc7 = _mm256_fmadd_pd(
+                _mm256_load_pd(Src1 + i + 28),
+                _mm256_load_pd(Src2 + i + 28),
+                Acc7
+        );
     }
 
-    double EndResult = 0;
-    for (size_t i = VectRange * 4; i < Range; ++i) {
-        EndResult += Src1[i] * Src2[i];
+#define HorSumAVX(avx_double) ((double*)&avx_double)[0] + ((double*)&avx_double)[1] + ((double*)&avx_double)[2] + ((double*)&avx_double)[3];
+    double RetVal = HorSumAVX(Acc0) + HorSumAVX(Acc1) + HorSumAVX(Acc2) + HorSumAVX(Acc3) + HorSumAVX(Acc4) + HorSumAVX(Acc5) + HorSumAVX(Acc6) + HorSumAVX(Acc7);
+    for (size_t i = VectRange; i < Range; ++i) {
+        RetVal += Src1[i] * Src2[i];
     }
 
-    auto result =(double*) &Store;
-    return result[0] + result[1] + result[2] + result[3] + EndResult;
+    return RetVal;
 }
 
 #endif // __AVX__
@@ -83,14 +127,14 @@ double DotProduct(double *const Src1, double *const Src2, size_t Range) {
 
 template<>
 DotProductMachineChunked<double>::DotProductMachineChunked(const double* const Src1, const double* const Src2, const unsigned Threads, const size_t Range) :
-        DPMCore<double>(Src1, Src2, Threads, Range, (Range / (Threads * DOUBLE_VECTOR_LENGTH)) * Threads * DOUBLE_VECTOR_LENGTH),
-        ElemPerThread{ Range / (Threads * DOUBLE_VECTOR_LENGTH) }
+        DPMCore<double>(Src1, Src2, Threads, Range, (Range / (Threads * AVXInfo::f64Cap)) * Threads * AVXInfo::f64Cap),
+        ElemPerThread{ Range / (Threads * AVXInfo::f64Cap) }
 {}
 
 template<>
 DotProductMachineChunked<float>::DotProductMachineChunked(const float* const Src1, const float* const Src2, const unsigned Threads, const size_t Range) :
-        DPMCore<float>(Src1, Src2, Threads, Range, (Range / (Threads * SINGLE_VECTOR_LENGTH)) * Threads * SINGLE_VECTOR_LENGTH),
-        ElemPerThread{ Range / (Threads * SINGLE_VECTOR_LENGTH) }
+        DPMCore<float>(Src1, Src2, Threads, Range, (Range / (Threads * AVXInfo::f64Cap)) * Threads * AVXInfo::f64Cap),
+        ElemPerThread{ Range / (Threads * AVXInfo::f32Cap) }
 {}
 
 
@@ -134,13 +178,13 @@ void DotProductMachineChunked<float>::StartThread(const unsigned ThreadID) {
 template<>
 DotProductMachineComb<double>::DotProductMachineComb(const double* const Src1, const double* const Src2, const unsigned Threads, const size_t Range) :
         DPMCore<double>(Src1, Src2, Threads, Range,
-                        (((Range / DOUBLE_VECTOR_LENGTH) * DOUBLE_VECTOR_LENGTH) / PER_ITERATION_DOUBLE) * (CACHE_LINE / PER_ITERATION_DOUBLE)), LoopRange{Range / DOUBLE_VECTOR_LENGTH },
+                        (((Range / AVXInfo::f64Cap) * AVXInfo::f64Cap) / PER_ITERATION_DOUBLE) * (CacheInfo::LineSize / PER_ITERATION_DOUBLE)), LoopRange{Range / AVXInfo::f64Cap },
         PerCircle{PER_ITERATION_DOUBLE }
 {}
 
 template<>
 DotProductMachineComb<float>::DotProductMachineComb(const float* const Src1, const float* const Src2, const unsigned Threads, const size_t Range) :
-        DPMCore<float>(Src1, Src2, Threads, Range, (((Range / SINGLE_VECTOR_LENGTH) * SINGLE_VECTOR_LENGTH) / PER_CIRCLE_FLOAT) * PER_CIRCLE_FLOAT), LoopRange{Range / SINGLE_VECTOR_LENGTH },
+        DPMCore<float>(Src1, Src2, Threads, Range, (((Range / AVXInfo::f32Cap) * AVXInfo::f32Cap) / PER_CIRCLE_FLOAT) * PER_CIRCLE_FLOAT), LoopRange{Range / AVXInfo::f32Cap },
         PerCircle{ PER_CIRCLE_FLOAT }
 {}
 

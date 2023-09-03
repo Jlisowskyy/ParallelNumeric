@@ -20,7 +20,7 @@
 template<typename NumType>
 class Matrix1;
 
-template<typename NumType, unsigned ThreadCap = 20, unsigned (*Decider)(unsigned long long) = LogarithmicThreads<ThreadCap>>
+template<typename NumType, size_t ThreadCap = 20, size_t (*Decider)(size_t) = LogarithmicThreads<ThreadCap>>
 inline Matrix1<NumType> GetOuterProduct(const Vector<NumType>& A, const Vector<NumType>& B, bool HorizontalReturn = false);
 
 template<typename NumT>
@@ -50,7 +50,7 @@ class Matrix1 : public Vector<NumType>
 	// Contains information about actual hw size of each line different from ElementsPerLine by alignment
 	
 	bool IsMemoryPacked = false; 
-	// Memory optimizations for edge cases
+	// Mem optimizations for edge cases
 
 	using Vector<NumType>::Array;
 	using Vector<NumType>::IsHorizontal;
@@ -132,8 +132,8 @@ public:
 	inline std::pair<size_t, size_t> GetDim() { return std::make_pair(Rows, Cols); }
 
 #ifdef DEBUG_
-	virtual bool CheckForIntegrity(NumType Val, bool verbose);
-	virtual bool CheckForIntegrity(NumType* Val, bool verbose);
+	virtual bool CheckForIntegrity(NumType Val, bool verbose) const;
+	virtual bool CheckForIntegrity(NumType* Val, bool verbose) const;
 #endif // DEBUG_
 
 	Matrix1& operator=(const Matrix1& x);
@@ -169,20 +169,20 @@ public:
 		return *this = GetTransposed(*this);
 	}
 
-    template<unsigned ThreadCap,unsigned (*Decider)(unsigned long long)>
+    template<size_t ThreadCap, size_t (*Decider)(size_t)>
     friend Matrix1 MatrixSumSameAccess(const Matrix1 &a, const Matrix1 &b)
         // Handles the case when both matrices are stored in the same way
     {
         Matrix1 RetVal(a.Rows, a.Cols, a.IsHorizontal);
 
-        if (a.Size < ThreadedStartingThreshold) {
+        if (a.Size < ThreadInfo::ThreadedStartingThreshold) {
             MatrixSumHelperAlignedArrays(RetVal.Array, a.Array, b.Array, a.Size);
             return RetVal;
         }
 
-        unsigned ThreadAmount = Decider(a.Size);
+        size_t ThreadAmount = Decider(a.Size);
         ThreadPackage Threads = ResourceManager::GetThreads();
-        unsigned i;
+        size_t i;
         size_t ElementsPerThread = a.Size / (size_t)ThreadAmount;
 
         for (i = 0; i < ThreadAmount - 1; ++i) {
@@ -208,7 +208,7 @@ public:
 
 #define InequalityThreshold 2
 // TODO: replace function pointers and create unversal threaded procedure
-    template<unsigned ThreadCap, unsigned (*Decider)(unsigned long long)>
+    template<size_t ThreadCap, size_t (*Decider)(size_t)>
     friend Matrix1 MatrixSumDiffAccess(const Matrix1 &a, const Matrix1 &b) {
         Matrix1 RetVal(a.Rows, a.Cols, a.IsHorizontal);
         void (*Func)(NumType*, const NumType*, const NumType*, unsigned, unsigned, unsigned, unsigned, unsigned, unsigned);
@@ -247,8 +247,8 @@ public:
 
         }
 
-        if (a.Size < ThreadedStartingThreshold){
-            ElementsPerThread = (DimToDivide / CACHE_LINE) * CACHE_LINE;
+        if (a.Size < ThreadInfo::ThreadedStartingThreshold){
+            ElementsPerThread = (DimToDivide / CacheInfo::LineSize) * CacheInfo::LineSize;
 
             Func(RetVal.Array, a.Array, b.Array, 0, ElementsPerThread, CoDim,
                  RetVal.SizeOfLine, a.SizeOfLine, b.SizeOfLine);
@@ -258,9 +258,9 @@ public:
             return RetVal;
         }
 
-        unsigned ThreadAmount = Decider(a.Size);
+        size_t ThreadAmount = Decider(a.Size);
         ThreadPackage& Threads = ResourceManager::GetThreads();
-        unsigned i;
+        size_t i;
         ElementsPerThread = (DimToDivide / ThreadAmount);
 
         for (i = 0; i < ThreadAmount; ++i) {
@@ -285,7 +285,7 @@ public:
         return RetVal;
     }
 
-    template<unsigned ThreadCap = 8, unsigned (*Decider)(unsigned long long) = LogarithmicThreads<ThreadCap>>
+    template<size_t ThreadCap = 8, size_t (*Decider)(size_t) = LogarithmicThreads<ThreadCap>>
 	friend Matrix1 operator+(const Matrix1& a, const Matrix1& b)
         // Threaded sum of matrices
     {
@@ -306,15 +306,14 @@ private:
     }
 
 public:
-    template<unsigned ThreadCap = 20, unsigned (*Decider)(unsigned long long) = LogarithmicThreads<ThreadCap>>
+    template<size_t ThreadCap = 20, size_t (*Decider)(size_t) = LogarithmicThreads<ThreadCap>>
 	friend Matrix1 operator*(const Matrix1& A, const Matrix1& B){
-        if (A.Cols != B.Rows) [[unlikely2]]
+        if (A.Cols != B.Rows) [[unlikely]]
             throw std::runtime_error("[ERROR] Not able to perform matrix multiplication, wrong matrix sizes\n");
 
         Matrix1 RetVal(A.Rows, B.Cols, (NumType)0);
         GPMM<NumType> MultMachine = GetMultMachine(A,B,RetVal);
-        // TODO: Forward thredcap and decider
-        MultMachine.ExecuteOperation();
+        MultMachine.template ExecuteOperation<ThreadCap, Decider>();
 
         return RetVal;
     }
@@ -323,7 +322,7 @@ private:
     friend VMM<NumType> GetVMM<>(const Matrix1<NumType>& Mat, const Vector<NumType>& Vect, Vector<NumType>& RetVect);
 
 public:
-    template<unsigned ThreadCap = 20, unsigned (*Decider)(unsigned long long) = LogarithmicThreads<ThreadCap>>
+    template<size_t ThreadCap = 20, size_t (*Decider)(size_t) = LogarithmicThreads<ThreadCap>>
     friend Vector<NumType> operator*(const Matrix1& A, const Vector<NumType>& B){
         if (B.GetIsHorizontal() || A.Cols != B.GetSize())[[unlikely]]
             throw std::runtime_error("[ERROR] Not able to perform Vect and Matrix multiplication due to wrong sizes or dimensions\n");
@@ -336,7 +335,7 @@ public:
         return RetVal;
     }
 
-    template<unsigned ThreadCap = 20, unsigned (*Decider)(unsigned long long) = LogarithmicThreads<ThreadCap>>
+    template<size_t ThreadCap = 20, size_t (*Decider)(size_t) = LogarithmicThreads<ThreadCap>>
     friend Vector<NumType> operator*(const Vector<NumType>& A, const Matrix1& B){
         if (!A.GetIsHorizontal() || B.Rows != A.GetSize()) [[unlikely]]
             throw std::runtime_error("[ERROR] Not able to perform Vect and Matrix multiplication due to wrong sizes or dimensions\n");
@@ -365,7 +364,7 @@ private:
     friend OPM<NumType> GetOPM<>(const Vector<NumType>& A, const Vector<NumType>& B, Matrix1<NumType>& C, bool IsHor);
 
 public:
-    template<typename NumT, unsigned ThreadCap, unsigned (*Decider)(unsigned long long)>
+    template<typename NumT, size_t ThreadCap, size_t (*Decider)(size_t)>
     friend Matrix1<NumT> GetOuterProduct(const Vector<NumT>& A, const Vector<NumT>& B, bool HorizontalReturn);
 };
 
@@ -426,7 +425,6 @@ Matrix1<NumType>::Matrix1(size_t NNSize, const NumType *Init, bool ByRow, Resour
     SetupAccess();
     OptimizeResourceManagement();
     MoveFromPointer(Init);
-
 }
 
 template<typename NumType>
@@ -555,7 +553,7 @@ void Matrix1<NumType>::SetupAccess()
 #ifdef DEBUG_
 
 template<typename NumType>
-bool Matrix1<NumType>::CheckForIntegrity(NumType *Val, bool verbose)
+bool Matrix1<NumType>::CheckForIntegrity(NumType *Val, bool verbose) const
 // Passed data must be identically aligned to Array member data
 {
     for (size_t i = 0; i < Lines; ++i)
@@ -572,7 +570,7 @@ bool Matrix1<NumType>::CheckForIntegrity(NumType *Val, bool verbose)
 }
 
 template<typename NumType>
-bool Matrix1<NumType>::CheckForIntegrity(NumType Val, bool verbose) {
+bool Matrix1<NumType>::CheckForIntegrity(NumType Val, bool verbose) const {
     for (size_t i = 0; i < Lines; ++i)
         for (size_t j = 0; j < ElementsPerLine; ++j)
             if (Array[i * SizeOfLine + j] != Val) [[unlikely]] {
@@ -687,7 +685,7 @@ inline OPM<NumT> GetOPM(const Vector<NumT>& A, const Vector<NumT>& B, Matrix1<Nu
     return OPM<NumT>(A.GetArray(), B.GetArray(), C.Array, A.GetSize(), B.GetSize(), C.SizeOfLine, IsHor);
 }
 
-template<typename NumT, unsigned ThreadCap, unsigned (*Decider)(unsigned long long)>
+template<typename NumT, size_t ThreadCap, size_t (*Decider)(size_t)>
 Matrix1<NumT> GetOuterProduct(const Vector<NumT>& A, const Vector<NumT>& B, bool HorizontalReturn){
     if (A.GetIsHorizontal() || !B.GetIsHorizontal()){
         throw std::runtime_error("[ERROR] Dimensions of passed vector does not allow to perform OuterProduct\n");

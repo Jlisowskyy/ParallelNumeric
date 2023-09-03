@@ -6,82 +6,80 @@
 #include <exception>
 
 ResourceManager* DefaultMM = nullptr;
-
-unsigned long ResourceManager::AllUsedMemory = 0;
-unsigned short ResourceManager::ExistingInstances = 0;
+size_t MemUsageCollector::GlobalUsage = 0;
 ThreadPackage ResourceManager::ThreadAssets[ResourceManager::ThreadsAssetsSetsAmount];
 
-
-ResourceManager::ResourceManager(){
-    ++ExistingInstances;
-    if (!GetRegion(OperatingRegionSize))
-#ifdef _MSC_VER 
-        throw std::exception("Not able to init OpMemory");
-#else
-        throw std::exception();
-#endif
-}
-
 ResourceManager::~ResourceManager(){
-    for (short i = 0; i < MemoryAssetsSize; ++i)
-        if (MemoryAssets[i] != nullptr) delete MemoryAssets[i];
-
-    AllUsedMemory -= UsedMemory;
-    --ExistingInstances;
+    for(auto& Iter : MemAssets){
+        delete Iter;
+    }
 }
 
-void ResourceManager::SortMemoryAssets() {
-    int sorted = 0;
-    for (int i = 0; i < MemoryAssetsSize; ++i) {
-        if (MemoryAssets[i] != nullptr) {
-            MemoryAssets[sorted++] = MemoryAssets[i];
-            MemoryAssets[i] = nullptr;
+ThreadPackage &ResourceManager::GetThreads()
+    // TODO: Reconsider this shit
+{
+    for (auto & ThreadAsset : ThreadAssets) {
+        if (!ThreadAsset.Occupied) {
+            ThreadAsset.Occupied = true;
+            return ThreadAsset;
         }
     }
 
-    MemoryAssetsInd = sorted;
+    throw std::runtime_error("[ERROR] Thread resources overload. All threads should be released after usage\n");
 }
 
-Region* ResourceManager::GetRegion(unsigned SizeMB)
-// Possibly to return nullptr when new not succeed
-{
-    if (SizeMB + AllUsedMemory > MAX_MEM_USAGE || UsedRegions >= MemoryAssetsSize) {
-        return nullptr;
-    }
-
-    if (MemoryAssetsInd >= MemoryAssetsSize) SortMemoryAssets();
-
-    auto* RetPtr = new (std::nothrow) Region(SizeMB);
-
-    if (RetPtr != nullptr) {
-        UsedMemory += SizeMB;
-        AllUsedMemory += SizeMB;
-        ++UsedRegions;
-        MemoryAssets[MemoryAssetsInd++] = RetPtr;
-    }
-
-    return RetPtr;
+void MemUsageCollector::SetUsage(size_t Mem) {
+    GlobalUsage -= InstanceUsage;
+    GlobalUsage += Mem;
+    InstanceUsage = Mem;
 }
 
-void ResourceManager::DeleteRegion(Region* RegionToRemove)
+void MemUsageCollector::AppendUsage(size_t Arg) {
+    InstanceUsage += Arg;
+    GlobalUsage += Arg;
+}
+
+Region::Region(SizeMB Val) : Used{ 0 } {
+    Size = Val.GetBytes();
+    AllocateCacheAligned();
+}
+
+Region::~Region() {
+    DeallocateAlignedData();
+}
+
+void Region::Reserve(SizeMB Val)
+    // Tries to expand region size. Possible only when there are no references to the block.
 {
-    if (RegionToRemove == nullptr) return;
+    if (size_t NewSize = Val.GetBytes(); !Used && NewSize > Size) [[likely]]{
+        DeallocateAlignedData();
+        Size = NewSize;
+        AllocateCacheAligned();
+    }
+}
 
-    for (int i = 0; i < MemoryAssetsSize; ++i)
-        if (RegionToRemove == MemoryAssets[i]) {
-            UsedMemory -= (unsigned long)(MemoryAssets[i]->Size / Region::MB);
-            AllUsedMemory -= (unsigned long)(MemoryAssets[i]->Size / Region::MB);
-            --UsedRegions;
+void Region::AllocateCacheAligned()
+    // Corresponding to available system libraries calls proper function to allocate memory aligned to
+    // Cache line length. Uses private data member to get the amount of memory to alloc.
+{
+#ifdef OP_SYS_WIN
+    Mem = _aligned_malloc(Size , CacheInfo::LineSize);
+#elif defined(OP_SYS_UNIX)
+    Mem = aligned_alloc(CacheInfo::LineSize, Size);
+#endif
 
-            delete MemoryAssets[i];
-            MemoryAssets[i] = nullptr;
-            return;
-        }
+    if (!Mem) [[unlikely]]{
+        throw AllocationError(Size, AllocationError::SourceType::RegionAlloc);
+    }
+}
 
-   
-#ifdef _MSC_VER 
-    throw std::exception("Region managment fault RSMG-DeleteRegion");
-#else
-    throw std::exception();
+void Region::DeallocateAlignedData()
+    // Corresponding to available system libraries calls proper function to release memory
+{
+#ifdef OP_SYS_WIN
+    _aligned_free(Mem);
+#elif defined(OP_SYS_UNIX)
+    free(Mem);
 #endif
 }
+

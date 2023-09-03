@@ -1,61 +1,93 @@
 
 // Author: Jakub Lisowski
 // Prosta biblioteka, realizujaca wielowatkowe obliczenia numeryczna. Zostala stworzona 
-// w celach rozrywkowych, przy okazji poznajac mechanizmy wielowatkowosci C++
+// w celach rozrywkowych i edukacyjnych, przy okazji poznajac mechanizmy wielowatkowosci C++
 
-#ifndef Parallel_Numeric_Jlisowskyy_H
-#define Parallel_Numeric_Jlisowskyy_H
+#ifndef PARALLEL_NUMERIC_JLISOWSKYY_H
+#define PARALLEL_NUMERIC_JLISOWSKYY_H
 
 #include <thread>
 #include <utility>
 
-#define DOUBLE_VECTOR_LENGTH 4
-#define SINGLE_VECTOR_LENGTH 8
-#define BYTE_SIZE 8
-#define AVX_SIZE 256
-#define ALIGN 64
-#define CACHE_LINE 64
-
+// ----------------------------------
 // Compilation controllers
+// ----------------------------------
+
 #define DEBUG_
 
 // TODO: Not done yet not all operations adapt to this optimisation
-//#define OPTIMISE_MEM_
+// #define OPTIMISE_MEM_
+
+// Globally adjust some functions to by the default emit double specialized types
+using DefaultNumType = double;
+
+// ----------------------------------
+
+#ifdef __AVX__
+
+namespace AVXInfo
+{
+    constexpr size_t f64Cap { 4 };
+    constexpr size_t f32Cap { 8 };
+    constexpr size_t BitCap { 256 };
+    constexpr size_t ByteCap { 256 / 8 };
+}
+
+#endif
+
+namespace CacheInfo
+    // Sizes defined in Byte manner
+{
+    constexpr size_t LineSize { 64 };
+    constexpr size_t L1Size { 32 * 1024 };
+    constexpr size_t L2Size { 2 * 1024 * 1024 }; // Per core assumption
+    constexpr size_t L3Size { 20 * 1024 * 1024 }; // Global assumption
+}
 
 using cun = const unsigned;
 using cull = const unsigned long long;
 using ull = unsigned long long;
 
-const long long unsigned ThreadedStartingThreshold = 32768;
-const unsigned BasicThreadPool = 8;
-const unsigned MaxCPUThreads = 20;
-constexpr unsigned long GB = 1024 * 1024 * 1024;
+namespace ThreadInfo{
+    constexpr size_t ThreadedStartingThreshold { 32768 };
+    constexpr size_t BasicThreadPool { 8 };
+    constexpr size_t MaxCpuThreads { 20 };
+}
+
+namespace MemoryInfo{
+    constexpr size_t GB { 1024 * 1024 * 1024 } ;
+    constexpr size_t MB { 1024 * 1024 };
+    constexpr size_t KB { 1024 };
+    constexpr size_t TotalHwMem { 32768 };
+    constexpr size_t MaxMemUsage { 24576 };
+}
+
 
 // Detecting the system on compilation
+// TODO: Move to CMake
 #ifdef __unix
-    #define OpSysUNIX_
+    #define OP_SYS_UNIX
 #elif defined __unix__
-    #define OpSysUNIX_
+    #define OP_SYS_UNIX
 #elif defined __linux__
-    #define OpSysUNIX_
+    #define OP_SYS_UNIX
 #elif  defined _WIN32
-    #define OpSysWIN_
+    #define OP_SYS_WIN
 #elif defined _WIN64
-    #define OpSysWIN_
+    #define OP_SYS_WIN
 #else
     #define OpSysNONE_
 #endif
 
 // Correct including behavior
-#ifdef OpSysUNIX_
+#ifdef OP_SYS_UNIX
 
 #include <sys/ioctl.h> 
 
-#elif defined OpSysWIN_
+#elif defined(OP_SYS_WIN)
 
 #include <windows.h>
 #include <sysinfoapi.h>
-
 
 #else
     // Solve problem
@@ -63,11 +95,6 @@ constexpr unsigned long GB = 1024 * 1024 * 1024;
     //TODO: SOLVE PROBLEMS WITH DETECTIONS
 
 
-// Temporary
-#define TOTAL_HW_MEMORY (unsigned long)32768
-#define MAX_MEM_USAGE (unsigned long)24576
-#define MATRIX_MULT_BLOCK_COEF 4
-
 int FindConsoleWidth(); 
 
-#endif
+#endif // PARALLEL_NUMERIC_JLISOWSKYY_H

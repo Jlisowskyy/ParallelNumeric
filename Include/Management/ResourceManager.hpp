@@ -1,154 +1,150 @@
 
 // Author: Jakub Lisowski
 
-#ifndef PARALLELNUM_RESOURCE_MANAGER_H
-#define PARALLELNUM_RESOURCE_MANAGER_H
+#ifndef PARALLELNUMERIC_RESOURCEMANAGER_HPP
+#define PARALLELNUMERIC_RESOURCEMANAGER_HPP
 
 #include <malloc.h>
 #include <exception>
 #include <cmath>
+#include <list>
 
 #include "../Wrappers/ParallelNumeric.hpp"
+#include "../Maintenance/ErrorCodes.hpp"
 
-template<unsigned ThreadCap = MaxCPUThreads>
-inline unsigned LogarithmicThreads(unsigned long long);
+template<size_t ThreadCap = ThreadInfo::MaxCpuThreads>
+inline size_t LogarithmicThreads(size_t);
+    // Simple Example of Thread number calculation, used in all threaded functions
 
-template<unsigned ThreadCap = MaxCPUThreads>
-inline unsigned LinearThreads(unsigned long long);
+template<size_t ThreadCap = ThreadInfo::MaxCpuThreads>
+inline size_t LinearThreads(size_t);
+    // Simple Example of Thread number calculation, used in all threaded functions
 
-class Region{
-    static constexpr int MB = 1024 * 1024;
-    long long unsigned Size;
-    long long unsigned Used;
-    void* Memory;
-
-    friend class ResourceManager;
-    public:
-        Region(unsigned SizeMB) : Used{ 0 } {
-            Size = MB * SizeMB;
-            Memory = malloc(Size);
-
-            if (Memory == nullptr){
-#ifdef _MSC_VER 
-                throw std::exception("Allocation error");
-#else
-                throw std::exception();
-#endif           
-            }
-        }
-
-        ~Region(){
-            free(Memory);
-        }
-
-        template<typename T>
-        void Allocate(T** AllocRes, long long unsigned AllocSize){
-            if (Used + AllocSize * sizeof(T) > Size)
-                *AllocRes = nullptr;
-            else{
-                *AllocRes = (T*)((char*)Memory + Used);
-                Used += AllocSize * sizeof(T);
-            }
-        }        
-
+class MemUsageCollector
+    // Used in memory usage optimizations and debugging information also
+    // Collects information about memory usage in specific case of allocating memory without ResourceManager
+{
+    static size_t GlobalUsage;
+protected:
+    size_t InstanceUsage;
+    void SetUsage(size_t Mem);
+    void AppendUsage(size_t Arg);
+public:
+    MemUsageCollector(): InstanceUsage { 0 } {}
+    ~MemUsageCollector() { GlobalUsage -= InstanceUsage; }
+    static size_t GetGlobalUsage() { return GlobalUsage; }
 };
 
-//class Linker {
-//    Linker** Manager = nullptr;
-//    bool Alive;
-//    bool Occupied;
-//public:
-//    Linker(bool Alive = false, bool Occupied = false) : Alive{ Alive }, Occupied{ Occupied } {}
-//    bool IsAvailable() {
-//        return Alive == false || Occupied == false;
-//    }
-//    friend class LinkManager;
-//};
-//
-//class LinkManager {
-//    Linker* Connections[2];
-//public:
-//    LinkManager(): Connections {nullptr} {}
-//    ~LinkManager() {
-//        for (int i = 0; i < 4; ++i)
-//            if (Connections[i])
-//                Connections[i]->Alive = false;
-//    }
-//};
+class SizeMB
+    // Interface reminding that memory should be passed in MegaBytes
+{
+    size_t Size;
+public:
+    explicit SizeMB(size_t Val): Size{ Val } {}
+    size_t GetBytes() const { return Size * MemoryInfo::MB; }
+};
+
+class Region{
+    size_t Size;
+    size_t Used;
+    void* Mem;
+
+    class SubRegion{
+        size_t Size;
+        size_t Used;
+        void* Mem;
+
+        std::list<SubRegion> SubRegions;
+    public:
+        void Expand(const size_t Val) { Size += Val; }
+    };
+
+    std::list<SubRegion> SubRegions;
+
+    inline void AllocateCacheAligned();
+    inline void DeallocateAlignedData();
+    friend class ResourceManager;
+    public:
+        explicit Region(SizeMB Val);
+        ~Region();
+
+        void Reserve(SizeMB Val);
+
+        template<typename PrimitiveT>
+        PrimitiveT* Allocate(size_t AllocSize);
+
+        template<typename PrimitiveT>
+        PrimitiveT* AllocateAligned(size_t AllocSize, size_t Alignment);
+};
+
 
 struct ThreadPackage {
-    std::thread* Array[MaxCPUThreads]{ nullptr };
+    std::thread* Array[ThreadInfo::MaxCpuThreads]{ nullptr };
     bool Occupied = false;
 
     ThreadPackage() = default;
 
-    inline void Release() {
-        Occupied = false;
-    }
+    inline void Release() { Occupied = false; }
 };
 
-class ResourceManager
-    // Class used to globally collect info about resource usage probably used in future
+class ResourceManager: public MemUsageCollector
+    // Class used to globally manage memory usage, provides less system call allocation to improve performance, but
+    // may also lead to increased memory usage
 {
-    static unsigned short ExistingInstances;
-    static unsigned long AllUsedMemory;
-    static const unsigned short ThreadsAssetsSetsAmount = 16;
+    static constexpr size_t ThreadsAssetsSetsAmount { 16 };
     static ThreadPackage ThreadAssets[ThreadsAssetsSetsAmount];
 public:
+    static ThreadPackage& GetThreads();
 
-    static ThreadPackage& GetThreads() {
-        for (auto & ThreadAsset : ThreadAssets) {
-            if (!ThreadAsset.Occupied) {
-                ThreadAsset.Occupied = true;
-                return ThreadAsset;
-            }
-        }
-#ifdef _MSC_VER 
-        throw std::exception("Thread resources overloaded");
-#else
-        throw std::exception();
-#endif  
-    }
+private:
+    static constexpr size_t MemAssetsSize { 64 };
+    size_t UsedMemory { 0 };
+    size_t UsedRegions { 0 };
+    size_t MemoryAssetsInd { 0 };
 
-
-protected:
-    unsigned long UsedMemory = 0; //MB
-
-    const short MemoryAssetsSize = 64;
-    const short OperatingRegionSize = 128;
-    Region* MemoryAssets[64]{nullptr};
-    unsigned short UsedRegions = 0;
-    unsigned short MemoryAssetsInd = 0;
-
-    void SortMemoryAssets();
+    Region* MemAssets[MemAssetsSize] { nullptr };
 
 public:
-    ResourceManager();
     ~ResourceManager();
-
-    Region* GetRegion(unsigned);
-    void DeleteRegion(Region*);
-
-    template<typename T>
-    void ArrayPop(T** ArrayPtr, unsigned long long ArraySize) {
-        MemoryAssets[0]->Allocate(ArrayPtr, ArraySize);
-    }
 };
 
-template<unsigned ThreadCap>
-unsigned LogarithmicThreads(const unsigned long long int Elements) {
-    auto Ret = (unsigned)(log2((double) (Elements / ThreadedStartingThreshold) ) + 1);
+template<size_t ThreadCap>
+size_t LogarithmicThreads(const size_t Elements) {
+    auto Ret = static_cast<size_t>(log2(Elements / ThreadInfo::ThreadedStartingThreshold + 1));
     return std::min(ThreadCap, Ret);
 }
 
-template<unsigned ThreadCap>
-unsigned LinearThreads(const unsigned long long int Elements) {
-    auto Ret = (unsigned)(Elements / ThreadedStartingThreshold);
+template<size_t ThreadCap>
+size_t LinearThreads(const size_t Elements) {
+    auto Ret = static_cast<size_t>(Elements / ThreadInfo::ThreadedStartingThreshold);
     return std::min(ThreadCap, Ret);
 }
 
-//void ResourceManagerThread() {
-//
-//}
+template<typename PrimitiveT>
+PrimitiveT* Region::Allocate(size_t AllocSize)
+    // Returns unaligned chunk of memory stored inside the region
+    // If AllocSize exceeds region capacity returns nullptr
+{
+    if (size_t NewUsage = Used + AllocSize * sizeof(PrimitiveT); NewUsage <= Size) {
+        PrimitiveT* RetVal = (size_t)Mem + Used;
+        Used = NewUsage;
+        return RetVal;
+    }
+    else return nullptr;
+}
+
+template<typename PrimitiveT>
+PrimitiveT *Region::AllocateAligned(size_t AllocSize, size_t Alignment)
+    // Returns aligned chunk of memory stored inside the region
+{
+    const size_t OverPop = Used % Alignment;
+    const size_t AlignmentOffset = Alignment - OverPop;
+    if (const size_t NewUsage = AllocSize * sizeof(PrimitiveT) + AlignmentOffset + Used; NewUsage <= Size){
+        const size_t RetOffset = Used + Alignment - OverPop;
+        Used = NewUsage;
+        return (size_t)Mem + RetOffset;
+    }
+    else return nullptr;
+}
 
 #endif

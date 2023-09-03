@@ -6,59 +6,65 @@
 
 #include <cstdlib>
 #include <cmath>
+#include <tuple>
 
 #include "../Wrappers/OptimalOperations.hpp"
 
 // TODO: replace with tuple
 // TODO: create template for all tests etc
+
 size_t GenerateNumber(size_t MinVal, size_t MaxVal) {
     return  (size_t)((3 * (double)rand() / (double)RAND_MAX) * (double)(MaxVal - MinVal)) + MinVal;
 }
 
-struct DPack
-    // DimsPack
-{
-    size_t dim1, dim2, dim3;
-};
+using D3Pack = std::tuple<size_t, size_t, size_t>;
+using D2Pack = std::tuple<size_t, size_t>;
 
-DPack GenDims(size_t OpCount){
+D3Pack Gen3Dims(size_t OpCount){
     size_t dim1 = GenerateNumber(4, std::cbrt(OpCount));
     size_t dim2 = GenerateNumber(2, std::sqrt(OpCount / dim1));
     size_t dim3 = OpCount / (dim1 * dim2);
 
-    return {dim1, dim2, dim3};
+    return std::make_tuple(dim1, dim2, dim3);
 }
 
-template <typename NumType = double , DPack(*GetDims)(size_t) = GenDims>
-bool PerformMMTest(size_t OperationCount, unsigned RunsToDo, long Seed = 0, bool Verbose = false) {
+D2Pack Gen2Dims(size_t OpCount){
+    size_t dim1 = GenerateNumber(2, std::sqrt(OpCount));
+    size_t dim2 = GenerateNumber(2, OpCount / dim1);
 
-    unsigned SuccessfulRuns = 0;
-    long long ShortestRun, LongestRun, LastRun;
+    return std::make_tuple(dim1, dim2);
+}
+
+template<typename Arg1T, typename Arg2T, typename ResT,
+        std::tuple<Arg1T, Arg2T> (*ConstrPack)(size_t),
+        ResT (*FuncToTest)(std::tuple<Arg1T, Arg2T>&),
+        bool (*SuccessTest)(std::tuple<Arg1T, Arg2T>&, ResT&, bool) = nullptr,
+        bool Verbose = false>
+void PerformXXXTest(size_t OpCount, unsigned RunsToGo, long Seed = 0)
+{
+    unsigned SuccessfulRuns{};
+    long long ShortestRun{};
+    long long LongestRun{};
+    long long LastRun{};
     Timer T1("Every Run Counter", false), T2("Only Succesful Runs Counter", false);
 
-    if (!Seed) {
+    if (!Seed)  {
         srand(time(nullptr));
     }
 
-    T1.CalculateAverageTime(RunsToDo, Verbose);
-    T2.CalculateAverageTime(RunsToDo);
+    T1.CalculateAverageTime(RunsToGo, Verbose);
+    T2.CalculateAverageTime(RunsToGo);
 
-    for (unsigned i = RunsToDo; i; --i) {
-
-        auto Val1 = (NumType)GenerateNumber(1, 25);
-        auto Val2 = (NumType)GenerateNumber(1, 5);
-        DPack d = GetDims(OperationCount);
-
-        Matrix1<NumType> M1(d.dim1, d.dim2, Val1);
-        Matrix1<NumType> M2(d.dim2, d.dim3, Val2);
+    for (unsigned i = RunsToGo; i; --i) {
+        std::tuple<Arg1T, Arg2T> Args = ConstrPack(OpCount);
 
         T2.Start();
         T1.Start();
-        Matrix1<NumType> M3 = M1 * M2;
+        auto Result = FuncToTest(Args);
         LastRun = T1.Stop();
         T2.Stop();
 
-        if (i == RunsToDo) {
+        if (i == RunsToGo) {
             ShortestRun = LongestRun = LastRun;
         }
         else {
@@ -66,170 +72,181 @@ bool PerformMMTest(size_t OperationCount, unsigned RunsToDo, long Seed = 0, bool
             ShortestRun = std::min(LastRun, ShortestRun);
         }
 
-        bool SuccessFlag = M3.CheckForIntegrity((NumType)(d.dim2 * Val1 * Val2), Verbose);
-
-        if (!SuccessFlag) {
-            T2.InvalidateLastRun();
-        }
-        else ++SuccessfulRuns;
-
-        if (Verbose) {
-            std::cout << "\nDims:" << d.dim1 << '\n' << d.dim2 << '\n' << d.dim3 << '\n';
+        if constexpr(SuccessTest){
+            bool SuccessFlag = SuccessTest(Args, Result, Verbose);
+            if (!SuccessFlag) {
+                T2.InvalidateLastRun();
+            }
+            else {
+                ++SuccessfulRuns;
+            }
         }
     }
 
     std::cout << "\n\nWith longest time: " << (double)LongestRun * 1e-9 << "(seconds)\nAnd shortest time: "
               << (double)ShortestRun * 1e-9 << "(seconds)\nWith seed: " << Seed << std::endl;
 
-    bool SuccessFlag = SuccessfulRuns == RunsToDo;
-    if (Verbose) {
-        if (SuccessFlag) {
+    if constexpr (Verbose) {
+        if (SuccessfulRuns == RunsToGo) {
             std::cout << "All runs were successful\n";
         } else {
             std::cout << "[ERROR] PROBLEM OCCURRED NOT ALL RUNS WERE SUCCESSFUL\n";
         }
     }
-    return SuccessFlag;
 }
 
-template<typename NumType, void(Vector<NumType>::*UnaryOperand)()>
-void PerformVectOnDataTest(size_t VectorSize, size_t RunsToDo){
-    Timer T1("Every Run Counter", false);
-    T1.CalculateAverageTime(RunsToDo, true);
-    Vector<NumType> V1(VectorSize, (NumType)100);
+template<bool Verbose = false, typename NumType = DefaultNumType, D3Pack(*GetDims)(size_t) = Gen3Dims>
+void PerformMMTest(size_t OpCount, unsigned RunsToGo, long Seed = 0){
+    using MatT = Matrix1<NumType>;
+    using MatP = std::tuple<MatT, MatT>;
 
-    while(RunsToDo--){
-        T1.Start();
-        (V1.*UnaryOperand)();
-        T1.Stop();
-    }
+    PerformXXXTest<MatT, MatT, MatT,
+                    [](size_t OpCount) -> MatP{
+                        NumType Val1 = GenerateNumber(1,25);
+                        NumType Val2 = GenerateNumber(1, 5);
+                        D3Pack d = GetDims(OpCount);
+
+                        if constexpr (Verbose){
+                            std::cout << "Generated Dims: " << std::get<0>(d) << ", " << std::get<1>(d) <<
+                                    ", " << std::get<2>(d) << '\n';
+                        }
+
+                        return std::make_tuple(
+                                MatT(std::get<0>(d), std::get<1>(d), Val1),
+                                MatT(std::get<1>(d), std::get<2>(d), Val2)
+                        );
+                    },
+                    [](MatP& Args) -> MatT{
+                        return operator*(std::get<0>(Args), std::get<1>(Args));
+                    },
+                    [](MatP& Args, MatT& Result, bool Verb) -> bool{
+                        NumType ExpectedRes = std::get<0>(Args).GetCols() * std::get<0>(Args)[0] * std::get<1>(Args)[0];
+                        return Result.CheckForIntegrity(ExpectedRes, Verb);
+                    },
+                    Verbose>(OpCount, RunsToGo, Seed);
 }
 
-void PerformMajorTests(unsigned RunsToDo) {
-    unsigned CorrectRuns = 0;
+template<typename NumType,  Vector<NumType>&(Vector<NumType>::*UnaryOperand)(), bool Verbose = false>
+void PerformVectOnDataTest(size_t VectorSize, unsigned RunsToGo){
+    using VecT = Vector<NumType>;
+    using VecP = std::tuple<VecT, bool>;
 
-    while (RunsToDo--) {
-        if (PerformMMTest<double>(1000000000ull, 100, 0)) {
-            ++CorrectRuns;
-        }
-    }
-
-    std::cout << "\n\n" << CorrectRuns << " of " << RunsToDo << " were successful in major test\n";
+    PerformXXXTest<VecT, bool, VecT&,
+            [](size_t VSize) -> VecP{
+                return std::make_tuple(VecT(VSize, (NumType)100), true);
+            },
+            [](VecP& Args) -> VecT&{
+                return (std::get<0>(Args).*UnaryOperand)();
+            },
+            nullptr, Verbose
+        >(VectorSize, RunsToGo);
 }
 
-template <typename NumType = double , DPack(*GetDims)(size_t) = GenDims>
-bool PerformOPTest(size_t OperationCount, unsigned RunsToDo, long Seed = 0, bool IsHor = false, bool Verbose = false){
-    unsigned SuccessfulRuns = 0;
-    long long ShortestRun, LongestRun, LastRun;
-    Timer T1("Every Run Counter", false);
+template <bool Verbose = false, bool IsHor = false, typename NumType = DefaultNumType, D2Pack(*GetDims)(size_t) = Gen2Dims>
+void PerformOPTest(size_t OpCount, unsigned RunsToGo, long Seed = 0) {
+    using ArgT = Vector<NumType>;
+    using ArgP = std::tuple<ArgT, ArgT>;
+    using RetT = Matrix1<NumType>;
 
-    if (!Seed) {
-        srand(time(nullptr));
-    }
+    PerformXXXTest<ArgT, ArgT, RetT,
+            [](size_t OpCount) -> ArgP{
+                NumType Val1 = GenerateNumber(1,25);
+                NumType Val2 = GenerateNumber(1, 5);
 
-    T1.CalculateAverageTime(RunsToDo, Verbose);
+                D2Pack Dims = GetDims(OpCount);
 
-    for (unsigned i = RunsToDo; i; --i) {
-        auto Val1 = (NumType)GenerateNumber(1, 25);
-        auto Val2 = (NumType)GenerateNumber(1, 5);
-        DPack d = GetDims(OperationCount);
+                if constexpr(Verbose){
+                    std::cout << "Generated dims: " << std::get<0>(Dims) << ", " << std::get<1>(Dims) << '\n';
+                }
 
-        Vector<NumType> V1(d.dim1, Val1, false);
-        Vector<NumType> V2(d.dim2, Val2, true);
-
-        T1.Start();
-        auto M = GetOuterProduct(V1,V2);
-        LastRun = T1.Stop();
-
-        if (i == RunsToDo) {
-            ShortestRun = LongestRun = LastRun;
-        }
-        else {
-            LongestRun = std::max(LastRun, LongestRun);
-            ShortestRun = std::min(LastRun, ShortestRun);
-        }
-
-        bool SuccessFlag = M.CheckForIntegrity(Val1 * Val2, Verbose);
-        if (SuccessFlag) ++SuccessfulRuns;
-    }
-
-    std::cout << "\n\nWith longest time: " << (double)LongestRun * 1e-9 << "(seconds)\nAnd shortest time: "
-              << (double)ShortestRun * 1e-9 << "(seconds)\nWith seed: " << Seed << std::endl;
-
-    bool SuccessFlag = SuccessfulRuns == RunsToDo;
-    if (Verbose) {
-        if (SuccessFlag) {
-            std::cout << "All runs were successful\n";
-        } else {
-            std::cout << "[ERROR] PROBLEM OCCURRED NOT ALL RUNS WERE SUCCESSFUL\n";
-        }
-    }
-    return SuccessFlag;
+                return std::make_tuple(ArgT(std::get<0>(Dims), Val1, false),
+                                       ArgT(std::get<1>(Dims), Val2, true));
+            },
+            [](ArgP& Args) -> RetT{
+                return GetOuterProduct(std::get<0>(Args), std::get<1>(Args), IsHor);
+            },
+            [](ArgP& Args, RetT& RetVal, bool Verb) -> bool{
+                return RetVal.CheckForIntegrity(std::get<0>(Args)[0] * std::get<1>(Args)[0], Verb);
+            },Verbose>(OpCount, RunsToGo, Seed);
 }
 
-template <typename NumType = double , DPack(*GetDims)(size_t) = GenDims>
-bool PerformVMMTest(size_t OperationCount, unsigned RunsToDo, long Seed = 0, bool Verbose = false,
-                    bool IsMatHor = false, bool IsVectHor = false){
-    unsigned SuccessfulRuns = 0;
-    long long ShortestRun, LongestRun, LastRun;
-    Timer T1("Every Run Counter", false);
+template<bool Verbose = false, bool IsArgMatHor = false, bool IsRetMatHor = false,bool IsVectHor = false,
+        typename NumType = DefaultNumType, D2Pack(*GetDims)(size_t) = Gen2Dims>
+void PerformVMMTest(size_t OperationCount, unsigned RunsToGo, long Seed = 0){
+    using MatT = Matrix1<NumType>;
+    using VecT= Vector<NumType>;
+    using ArgP = std::tuple<MatT, VecT>;
 
-    if (!Seed) {
-        srand(time(nullptr));
-    }
-    else srand(abs(Seed));
+    PerformXXXTest<MatT, VecT, VecT,
+            [](size_t OpCount) -> ArgP{
+                size_t VectDim{};
+                D2Pack Dims = GetDims(OpCount);
+                NumType Val1 = GenerateNumber(2, 25);
+                NumType Val2 = GenerateNumber(1,5);
 
-    T1.CalculateAverageTime(RunsToDo, Verbose);
+                if constexpr (Verbose){
+                    std::cout << "Generated dimensions: " << std::get<0>(Dims) << ", " << std::get<1>(Dims) << '\n';
+                }
 
-    for (unsigned i = RunsToDo; i; --i) {
-        auto Val1 = (NumType)GenerateNumber(1, 100);
-        auto Val2 = (NumType)GenerateNumber(1, 25);
-        DPack d = GetDims(OperationCount);
+                // When vector is transposed another dimension should be equal
+                if constexpr (IsVectHor) VectDim = std::get<0>(Dims);
+                else VectDim = std::get<1>(Dims);
 
-        // condition to meet vm mult requirements
-        Vector<NumType> V(IsVectHor ? d.dim1 : d.dim2, Val1, IsVectHor);
-        Matrix1<NumType> M(d.dim1, d.dim2, Val2, IsMatHor);
-//        Vector<NumType> result; TODO
+                return std::make_tuple(MatT(std::get<0>(Dims), std::get<1>(Dims), Val1, IsArgMatHor),
+                                       VecT(VectDim, Val2, IsVectHor));
+            },
+            [](ArgP& Args) -> VecT{
+                if constexpr(IsVectHor)
+                    // Vector * Matrix
+                {
+                    return std::get<1>(Args) * std::get<0>(Args);
+                }
+                else
+                    // Matrix * Vector
+                {
+                    return std::get<0>(Args) * std::get<1>(Args);
+                }
+            },
+            [](ArgP& Args, VecT& Result, bool Verb) -> bool{
+                size_t CoDim{};
+                if constexpr(IsVectHor){
+                    CoDim = std::get<0>(Args).GetRows();
+                }
+                else{
+                    CoDim = std::get<0>(Args).GetCols();
+                }
 
-//        if (IsVectHor){ TODO
-//            T1.Start();
-//            result = V * M;
-//            LastRun = T1.Stop();
-//        }
-//        else{
-//            T1.Start();
-//            result = M * V;
-//            LastRun = T1.Stop();
-//        }
+                return Result.CheckForIntegrity(CoDim * std::get<0>(Args)[0], std::get<1>(Args)[0]);
+            }, Verbose>
+            (OperationCount, RunsToGo, Seed);
+}
 
-        T1.Start();
-        auto result = M * V;
-        LastRun = T1.Stop();
+template<bool Verbose = false, typename NumType = DefaultNumType>
+void PerformInnerProductTest(size_t VectorSize, unsigned RunsToGo){
+    using VecT = Vector<NumType>;
+    using VecP = std::tuple<VecT, VecT>;
 
-        if (i == RunsToDo) {
-            ShortestRun = LongestRun = LastRun;
-        }
-        else {
-            LongestRun = std::max(LastRun, LongestRun);
-            ShortestRun = std::min(LastRun, ShortestRun);
-        }
+    PerformXXXTest<VecT, VecT, NumType,
+            [](size_t VSize) -> VecP{
+                return std::make_tuple(VecT(VSize, 1, true), VecT(VSize, 2, false));
+            },
+            [](VecP& Args) -> NumType{
+                return std::get<0>(Args) * std::get<1>(Args);
+            },
+            [](VecP& Args, NumType& Result, bool){
+                NumType ExpectedValue { static_cast<NumType>(std::get<0>(Args).GetSize() * 2) };
+                bool RetCond { Result == ExpectedValue };
 
-        bool SuccessFlag = result.CheckForIntegrity(Val1 * Val2 * V.GetSize(), Verbose);
-        if (SuccessFlag) ++SuccessfulRuns;
-    }
+                if constexpr(Verbose){
+                    std::cout << "Acquired result: " << Result << "\nExpected Result: " << ExpectedValue << '\n';
 
-    std::cout << "\n\nWith longest time: " << (double)LongestRun * 1e-9 << "(seconds)\nAnd shortest time: "
-              << (double)ShortestRun * 1e-9 << "(seconds)\nWith seed: " << Seed << std::endl;
+                    if (RetCond) std::cout << "Success!!\n";
+                    else std::cout << "This run was not successful one!!\n";
+                }
 
-    bool SuccessFlag = SuccessfulRuns == RunsToDo;
-    if (Verbose) {
-        if (SuccessFlag) {
-            std::cout << "All runs were successful\n";
-        } else {
-            std::cout << "[ERROR] PROBLEM OCCURRED NOT ALL RUNS WERE SUCCESSFUL\n";
-        }
-    }
-    return SuccessFlag;
+                return RetCond;
+            }, Verbose
+    >(VectorSize, RunsToGo);
 }
 
 #endif

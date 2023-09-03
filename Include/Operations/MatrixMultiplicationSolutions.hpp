@@ -14,9 +14,11 @@
 #include <cstdlib>
 #include "../Wrappers/ParallelNumeric.hpp"
 
+#define MATRIX_MULT_BLOCK_COEF 4
+
 template<typename T>
 class SimpleMultMachine {
-    static constexpr unsigned ElementsInCacheLine = (CACHE_LINE / sizeof(T));
+    static constexpr unsigned ElementsInCacheLine = (CacheInfo::LineSize / sizeof(T));
     static constexpr unsigned BlockSize = ElementsInCacheLine * MATRIX_MULT_BLOCK_COEF;
 	const unsigned Src1Rows;
 	const unsigned Src1Cols;

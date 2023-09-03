@@ -13,24 +13,27 @@
 #ifdef __AVX__
 
 template<>
-void Vector<double>::sqrt(){
+Vector<double>& Vector<double>::sqrt(){
     ApplyAVXOnDataEffect<__m256d, &_mm256_sqrt_pd, &std::sqrt>();
+    return *this;
 }
 
 template<>
-void Vector<float>::sqrt(){
+Vector<float>& Vector<float>::sqrt(){
     ApplyAVXOnDataEffect<__m256, &_mm256_sqrt_ps, &sqrtf>();
+    return *this;
 }
 
 template<>
-void Vector<float>::reciprocal(){
+Vector<float>& Vector<float>::reciprocal(){
     auto operand = [](float x) -> float{
         return 1 / x;
     };
     ApplyAVXOnDataEffect<__m256, &_mm256_rcp_ps, operand>();
+    return *this;
 }
 
 template<>
-void Vector<float>::reciprocal();
+Vector<float>& Vector<float>::reciprocal();
 
 #endif // __AVX__

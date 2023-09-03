@@ -111,12 +111,12 @@ void TransposeMatrixRowStored(NumType* Dst, NumType* Src, size_t SrcLines, size_
 // ------------------------------------------
 
 template<typename NumType>
-NumType DotProduct(NumType* Src1, NumType* Src2, size_t Range);
+NumType DotProduct(const NumType* Src1, const NumType* Src2, size_t Range);
 
 #ifdef __AVX__
 
 template<>
-double DotProduct(double * Src1, double * Src2, size_t Range);
+double DotProduct(const double * Src1, const double * Src2, size_t Range);
 
 #endif // __AVX__
 
@@ -132,7 +132,7 @@ protected:
 	const unsigned Threads;
 	const size_t Range;
 	const size_t EndIndex;
-	NumType ResultArray[MaxCPUThreads] = {NumType() };
+	NumType ResultArray[ThreadInfo::MaxCpuThreads] = {NumType() };
 	std::latch Counter;
 	std::latch WriteCounter;
 public:
@@ -178,10 +178,10 @@ void DotProductMachineChunked<float>::StartThread(unsigned ThreadID);
 template<typename NumType>
 class DotProductMachineComb: public DPMCore<NumType> {
 	const size_t LoopRange;
-	const size_t PerCircle = CACHE_LINE / sizeof(NumType);
+	const size_t PerCircle = CacheInfo::LineSize / sizeof(NumType);
 public:
 	DotProductMachineComb(const NumType* const Src1, const NumType* const Src2, unsigned Threads, size_t Range) :
-		LoopRange{ Range }, DPMCore<NumType>(Src1, Src2, Threads, Range, (Range / (CACHE_LINE / sizeof(NumType))) * (CACHE_LINE / sizeof(NumType)))
+		LoopRange{ Range }, DPMCore<NumType>(Src1, Src2, Threads, Range, (Range / (CacheInfo::LineSize / sizeof(NumType))) * (CacheInfo::LineSize / sizeof(NumType)))
 	{}
 
 	void StartThread(unsigned ThreadID);
@@ -203,6 +203,43 @@ void DotProductMachineComb<float>::StartThread(unsigned ThreadID);
 
 #endif
 
+// Before Optimisation average time on 10 runs was: 0.25
+
+template<typename NumType>
+class DotProductMachine{
+    const NumType* const APtr;
+    const NumType* const BPtr;
+    const size_t Size;
+
+public:
+    DotProductMachine(const NumType* const APtr, const NumType* const BPtr, const size_t Size):
+        APtr{ APtr }, BPtr{ BPtr }, Size{ Size } {}
+
+    template<size_t ThreadCap = 8, size_t (*Decider)(size_t) = LogarithmicThreads<ThreadCap>>
+    inline NumType Perform(){
+        if (Size < ThreadInfo::ThreadedStartingThreshold) {
+            return DotProduct(APtr, BPtr, Size);
+        }
+        else {
+            const size_t ThreadAmount = Decider(Size * 2);
+            DotProductMachineChunked<NumType> Machine(APtr, BPtr, ThreadAmount, Size);
+
+            ThreadPackage& Threads = ResourceManager::GetThreads();
+            for (size_t i = 0; i < ThreadAmount; ++i) {
+                Threads.Array[i] = new std::thread(&DotProductMachineChunked<NumType>::StartThread, &Machine, i);
+            }
+
+            for (size_t i = 0; i < ThreadAmount; ++i) {
+                Threads.Array[i]->join();
+                delete Threads.Array[i];
+            }
+            Threads.Release();
+
+            return Machine.GetResult();
+        }
+    }
+
+};
 // ------------------------------------------
 // Outer Product
 // ------------------------------------------
@@ -212,7 +249,7 @@ class OPM
     // Outer Product Machine
     // TODO Optimize for L3 - long vectors
 {
-    static constexpr size_t ElementsPerCacheLine = CACHE_LINE / sizeof(NumType);
+    static constexpr size_t ElementsPerCacheLine = CacheInfo::LineSize / sizeof(NumType);
 
     const NumType* CoefPtr;
     const NumType* VectPtr;
@@ -296,7 +333,7 @@ void MatrixSumHelperNotAlignedArrays_RC_DivByCols(NumType *Target, const NumType
 // Also, all data pointers should be aligned to cache lines;
 // otherwise, the operation may be much slower.
 {
-    const size_t ElementsInCacheLine = CACHE_LINE / sizeof(NumType);
+    const size_t ElementsInCacheLine = CacheInfo::LineSize / sizeof(NumType);
     const size_t RowsRange = ((size_t)(Rows / ElementsInCacheLine)) * ElementsInCacheLine;
 
     for (size_t i = 0; i < RowsRange; i += ElementsInCacheLine) {
@@ -329,7 +366,7 @@ MatrixSumHelperNotAlignedArrays_RC_DivByRows(NumType *Target, const NumType *con
 // Also, all data pointers should be aligned to cache lines;
 // otherwise, the operation may be much slower.
 {
-    const size_t ElementsInCacheLine = CACHE_LINE / sizeof(NumType);
+    const size_t ElementsInCacheLine = CacheInfo::LineSize / sizeof(NumType);
     const size_t ColsRange = ((size_t)(Cols / ElementsInCacheLine)) * ElementsInCacheLine;
 
     for (size_t j = StartRow; j < StopRow; j += ElementsInCacheLine) {
@@ -361,7 +398,7 @@ MatrixSumHelperNotAlignedArrays_CR_DivByCols(NumType *Target, const NumType *con
 // Also, all data pointers should be aligned to cache lines;
 // otherwise, the operation may be much slower.
 {
-    const size_t ElementsInCacheLine = CACHE_LINE / sizeof(NumType);
+    const size_t ElementsInCacheLine = CacheInfo::LineSize / sizeof(NumType);
     const size_t RowsRange = ((size_t) (Rows / ElementsInCacheLine)) * ElementsInCacheLine;
     for (size_t j = StartCol; j < StopCol; j += ElementsInCacheLine) {
         for (size_t i = 0; i < RowsRange; i += ElementsInCacheLine) {
@@ -391,7 +428,7 @@ MatrixSumHelperNotAlignedArrays_CR_DivByRows(NumType *Target, const NumType *con
 // Also, all data pointers should be aligned to cache lines;
 // otherwise, the operation may be much slower.
 {
-    const size_t ElementsInCacheLine = CACHE_LINE / sizeof(NumType);
+    const size_t ElementsInCacheLine = CacheInfo::LineSize / sizeof(NumType);
     const size_t ColsRange = ((size_t)(Cols / ElementsInCacheLine)) * ElementsInCacheLine;
 
     for (size_t i = 0; i < ColsRange; i += ElementsInCacheLine) {
@@ -421,7 +458,7 @@ void MatrixSumHelperNotAlignedArrays_CR_DivByCols_Frame(NumType *Target, const N
                                                         const size_t Input2SizeOfLine) {
     if (StartCol == StopCol) return;
 
-    const size_t ElementsInCacheLine = CACHE_LINE / sizeof(NumType);
+    const size_t ElementsInCacheLine = CacheInfo::LineSize / sizeof(NumType);
     const size_t RowsRange = ((size_t)(Rows / ElementsInCacheLine)) * ElementsInCacheLine;
 
     for (size_t i = 0; i < RowsRange; i += ElementsInCacheLine) {
@@ -448,7 +485,7 @@ void MatrixSumHelperNotAlignedArrays_CR_DivByRows_Frame(NumType *Target, const N
                                                         const size_t Input2SizeOfLine) {
     if (StartRow == StopRow) return;
 
-    const size_t ElementsInCacheLine = CACHE_LINE / sizeof(NumType);
+    const size_t ElementsInCacheLine = CacheInfo::LineSize / sizeof(NumType);
     const size_t ColsRange = ((size_t)(Cols / ElementsInCacheLine)) * ElementsInCacheLine;
 
     for (size_t i = 0; i < ColsRange; i += ElementsInCacheLine) {
@@ -473,7 +510,7 @@ void MatrixSumHelperNotAlignedArrays_RC_DivByRows_Frame(NumType *Target, const N
                                                         const size_t Input2SizeOfLine) {
     if (StartRow == StopRow) return;
 
-    const size_t ElementsInCacheLine = CACHE_LINE / sizeof(NumType);
+    const size_t ElementsInCacheLine = CacheInfo::LineSize / sizeof(NumType);
     const size_t ColsRange = ((size_t)(Cols / ElementsInCacheLine)) * ElementsInCacheLine;
 
     for (size_t i = 0; i < ColsRange; i += ElementsInCacheLine) {
@@ -500,7 +537,7 @@ void MatrixSumHelperNotAlignedArrays_RC_DivByCols_Frame(NumType *Target, const N
                                                         const size_t Input2SizeOfLine) {
     if (StartCol == StopCol) return;
 
-    const size_t ElementsInCacheLine = CACHE_LINE / sizeof(NumType);
+    const size_t ElementsInCacheLine = CacheInfo::LineSize / sizeof(NumType);
     const size_t RowsRange = ((size_t)(Rows / ElementsInCacheLine)) * ElementsInCacheLine;
 
     for (size_t i = 0; i < RowsRange; i+= ElementsInCacheLine) {
@@ -537,14 +574,14 @@ TransposeMatrixRowStored(NumType *Dst, NumType *Src, const size_t SrcLines, cons
 // ------------------------------------------
 
 template<typename NumType>
-NumType DotProduct(NumType *const Src1, NumType *const Src2, const size_t Range) {
-    NumType result = NumType();
+NumType DotProduct(const NumType *const Src1, const NumType *const Src2, const size_t Range) {
+    NumType RetVal = NumType{};
 
     for (size_t i = 0; i < Range; i++) {
-        result += Src1[i] * Src2[i];
+        RetVal += Src1[i] * Src2[i];
     }
 
-    return result;
+    return RetVal;
 }
 
 template<typename NumType>
@@ -678,17 +715,17 @@ inline void OPM<double>::Perform()
         const double *VectPtrIter = VectPtr;
         for (size_t j = 0; j < VectSize; j += ElementsPerCacheLine) {
             __m256d VectA0 = _mm256_load_pd(VectPtrIter);
-            __m256d VectA1 = _mm256_load_pd(VectPtrIter + DOUBLE_VECTOR_LENGTH);
+            __m256d VectA1 = _mm256_load_pd(VectPtrIter + AVXInfo::f64Cap);
             VectPtrIter += ElementsPerCacheLine;
 
             double *TargetFirstPtr0 = MatC + i * MatCSoL + j;
-            double *TargetSecondPtr0 = MatC + i * MatCSoL + j + DOUBLE_VECTOR_LENGTH;
+            double *TargetSecondPtr0 = MatC + i * MatCSoL + j + AVXInfo::f64Cap;
             double *TargetFirstPtr1 = MatC + (i + 2) * MatCSoL + j;
-            double *TargetSecondPtr1 = MatC + (i + 2) * MatCSoL + j + DOUBLE_VECTOR_LENGTH;
+            double *TargetSecondPtr1 = MatC + (i + 2) * MatCSoL + j + AVXInfo::f64Cap;
             double *TargetFirstPtr2 = MatC + (i + 4) * MatCSoL + j;
-            double *TargetSecondPtr2 = MatC + (i + 4) * MatCSoL + j + DOUBLE_VECTOR_LENGTH;
+            double *TargetSecondPtr2 = MatC + (i + 4) * MatCSoL + j + AVXInfo::f64Cap;
             double *TargetFirstPtr3 = MatC + (i + 6) * MatCSoL + j;
-            double *TargetSecondPtr3 = MatC + (i + 6) * MatCSoL + j + DOUBLE_VECTOR_LENGTH;
+            double *TargetSecondPtr3 = MatC + (i + 6) * MatCSoL + j + AVXInfo::f64Cap;
             LoadAvx(TargetFirstPtr0) = _mm256_mul_pd(VectA0, CoefBuff0);
             LoadAvx(TargetSecondPtr0) = _mm256_mul_pd(VectA1, CoefBuff0);
             LoadAvx(TargetFirstPtr1) = _mm256_mul_pd(VectA0, CoefBuff2);
@@ -724,11 +761,11 @@ inline void OPM<double>::Perform()
 
     for (size_t j = 0; j < VectSize; j += ElementsPerCacheLine) {
         __m256d VectFirst = _mm256_load_pd(VectPtr + j);
-        __m256d VectSecond = _mm256_load_pd(VectPtr + j + DOUBLE_VECTOR_LENGTH);
+        __m256d VectSecond = _mm256_load_pd(VectPtr + j + AVXInfo::f64Cap);
 
         for (size_t i = 0; i < CleaningRange; i++)
 #define CleaningTargetUpper MatC + (i + CoefRange) * MatCSoL + j
-#define CleaningTargetLower MatC + (i + CoefRange) * MatCSoL + j + DOUBLE_VECTOR_LENGTH
+#define CleaningTargetLower MatC + (i + CoefRange) * MatCSoL + j + AVXInfo::f64Cap
         {
             _mm256_store_pd(CleaningTargetUpper, _mm256_mul_pd(VectFirst, Buffers[i]));
             _mm256_store_pd(CleaningTargetLower, _mm256_mul_pd(VectSecond, Buffers[i]));

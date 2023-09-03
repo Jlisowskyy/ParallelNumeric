@@ -32,18 +32,17 @@ int main(){
 }
 #elif defined DebugVectors1
 
-
 using typior = double;
-size_t length = 40000;
+constexpr size_t length = (512 + 256) * 1024 * 1024;
 
 int main() {
-    PerformVMMTest<double, [](size_t) -> DPack { return { 36000, 40960, length }; }>(1600000000, 20, 0, true, true);
-//    PerformOPTest<double, [](size_t) -> DPack { return { length, length, length }; }>(1600000000, 10, 0, true, true);
+//    PerformVMMTest<double, [](size_t) -> D3Pack { return { 36000, 40960, length }; }>(1600000000, 20, 0, true, true);
+//    PerformOPTest<double, [](size_t) -> D3Pack { return { length, length, length }; }>(1600000000, 10, 0, true, true);
 //    Vect V1(length, (double)1, false);
 //    Vect V2(length, (double)65, true);
 //
 //    auto M3 = GetOuterProduct(V1, V2);
-
+    PerformInnerProductTest<true>(1e+9, 10);
 }
 
 #elif defined DebugMatrix1
@@ -59,7 +58,7 @@ int main() {
 //    T1.Stop();
 //    std::cout << M3;
 
-    PerformMMTest<double, [](unsigned long long) -> DPack { return {dim,dim,dim}; } >(1e+9, 5, 15060);
+    PerformMMTest<double, [](unsigned long long) -> D3Pack { return {dim,dim,dim}; } >(1e+9, 5, 15060);
 }
 
 // BEFORE BLOCKING UPDATE: 5.5 on dim dim dim, where dim = 4096

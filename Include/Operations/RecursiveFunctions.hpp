@@ -13,8 +13,8 @@ class SmartFuncParent
 {
 	NumType(*Func)(NumType);
 	NumType DistanceHolder = NumType();
-	NumType ThreadedResults[MaxCPUThreads] = {0 };
-	std::thread* Threads[MaxCPUThreads] = { nullptr };
+	NumType ThreadedResults[ThreadInfo::MaxCpuThreads] = {0 };
+	std::thread* Threads[ThreadInfo::MaxCpuThreads] = {nullptr };
 	Operation Oper;
     void (SmartFuncParent::* Helper)(unsigned long long, NumType, NumType*) = nullptr;
 
@@ -70,7 +70,7 @@ NumType SmartFuncParent<NumType, Operation, InitVal, Decider>::operator()(unsign
     NumType Res = InitVal;
     DistanceHolder = Distance;
 
-    if (Elements <= ThreadedStartingThreshold) {
+    if (Elements <= ThreadInfo::ThreadedStartingThreshold) {
         (this->*Helper)(Elements, StartPoint, &Res);
         return Res;
     }
@@ -100,10 +100,10 @@ NumType SmartFuncParent<NumType, Operation, InitVal, Decider>::operator()(unsign
 // Basic Interface declaration
 // -----------------------------
 
-template <typename T, unsigned ThreadCap = MaxCPUThreads, unsigned (*Decider)(unsigned long long) = LinearThreads<ThreadCap>>
+template <typename T, unsigned ThreadCap = ThreadInfo::MaxCpuThreads, unsigned (*Decider)(unsigned long long) = LinearThreads<ThreadCap>>
 using SmartFuncSum = SmartFuncParent<T, std::plus<T>, 0, Decider>;
 
-template <typename T, unsigned ThreadCap = MaxCPUThreads, unsigned (*Decider)(unsigned long long) = LinearThreads<ThreadCap>>
+template <typename T, unsigned ThreadCap = ThreadInfo::MaxCpuThreads, unsigned (*Decider)(unsigned long long) = LinearThreads<ThreadCap>>
 using SmartFuncProd = SmartFuncParent<T, std::multiplies<T>, 1, Decider>;
 
 #endif

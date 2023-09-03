@@ -7,7 +7,7 @@
 #include "../Types/Matrix.hpp"
 #include "../Types/Vector.hpp"
 
-using Mat = Matrix1<double>;
-using Vect = Vector<double>;
+using Mat = Matrix1<DefaultNumType>;
+using Vect = Vector<DefaultNumType>;
 
 #endif // PARALLELNUM_OPTIMALOPERATIONS_H

@@ -1,7 +1,7 @@
 // Author: Jakub Lisowski
 #include "../Include/Wrappers/ParallelNumeric.hpp"
 
-#ifdef OpSysWIN_
+#ifdef OP_SYS_WIN
  
 int FindConsoleWidth(){
 	CONSOLE_SCREEN_BUFFER_INFO buff;
