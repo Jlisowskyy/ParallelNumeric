@@ -3,11 +3,11 @@
 //
 
 #include "../Include/Operations/NumericalCore.hpp"
+#include "../Include/Operations/AVXSolutions.hpp"
 
 // -----------------------------------------
 // AVX specialisations
 // -----------------------------------------
-
 
 // -----------------------------------------
 // Matrix sum
@@ -58,195 +58,69 @@ void MatrixSumHelperAlignedArrays(float *Target, const float *const Input1, cons
 #ifdef __AVX__
 
 template<>
-double DotProduct(const double *const Src1, const double *const Src2, const size_t Range) {
-    const size_t VectRange = (Range / 32) * 32;
-    __m256d Acc0 = _mm256_setzero_pd();
-    __m256d Acc1 = _mm256_setzero_pd();
-    __m256d Acc2 = _mm256_setzero_pd();
-    __m256d Acc3 = _mm256_setzero_pd();
-    __m256d Acc4 = _mm256_setzero_pd();
-    __m256d Acc5 = _mm256_setzero_pd();
-    __m256d Acc6 = _mm256_setzero_pd();
-    __m256d Acc7 = _mm256_setzero_pd();
+double DotProductMachine<double>::DotProductAligned(size_t Begin, size_t End)
+    // Highly limited by memory bandwidth
+{
+    using AVXInfo::f64Cap;
+    static constexpr size_t LoadersCount = 3;
 
-    for (size_t i = 0; i < VectRange; i+=32) {
-        Acc0 = _mm256_fmadd_pd(
-                _mm256_load_pd(Src1 + i),
-                _mm256_load_pd(Src2 + i),
-                Acc0
+    __m256d AccRegs[AVXAccumulators] {_mm256_setzero_pd() };
+    __m256d LoadRegs[LoadersCount] {_mm256_setzero_pd() };
+
+    auto ApplyFMA = [&](size_t AccInd, size_t LoadInd, size_t Iter) -> void
+        // Executes single operation on Chosen accumulator and Loader registers with respect to passed Index in data
+    {
+        AccRegs[AccInd] = _mm256_fmadd_pd(
+                LoadRegs[LoadInd],
+                _mm256_load_pd(BPtr + Iter + AccInd * f64Cap),
+                AccRegs[AccInd]
         );
-        Acc1 = _mm256_fmadd_pd(
-                _mm256_load_pd(Src1 + i + 4),
-                _mm256_load_pd(Src2 + i + 4),
-                Acc1
-        );
-        Acc2 = _mm256_fmadd_pd(
-                _mm256_load_pd(Src1 + i + 8),
-                _mm256_load_pd(Src2 + i + 8),
-                Acc2
-        );
-        Acc3 = _mm256_fmadd_pd(
-                _mm256_load_pd(Src1 + i + 12),
-                _mm256_load_pd(Src2 + i + 12),
-                Acc3
-        );
-        Acc4 = _mm256_fmadd_pd(
-                _mm256_load_pd(Src1 + i + 16),
-                _mm256_load_pd(Src2 + i + 16),
-                Acc4
-        );
-        Acc5 = _mm256_fmadd_pd(
-                _mm256_load_pd(Src1 + i + 20),
-                _mm256_load_pd(Src2 + i + 20),
-                Acc5
-        );
-        Acc6 = _mm256_fmadd_pd(
-                _mm256_load_pd(Src1 + i + 24),
-                _mm256_load_pd(Src2 + i + 24),
-                Acc6
-        );
-        Acc7 = _mm256_fmadd_pd(
-                _mm256_load_pd(Src1 + i + 28),
-                _mm256_load_pd(Src2 + i + 28),
-                Acc7
-        );
+    };
+
+    auto ProcessLoadAndApply = [&](size_t FirstAccInd, size_t Iter)
+        // Does single blocked load operation and fma operation also
+    {
+        LoadRegs[0] = _mm256_load_pd(APtr + Iter + FirstAccInd * f64Cap);
+        LoadRegs[1] = _mm256_load_pd(APtr + Iter + (FirstAccInd + 1) * f64Cap);
+        LoadRegs[2] = _mm256_load_pd(APtr + Iter + (FirstAccInd + 2) * f64Cap);
+
+        ApplyFMA(FirstAccInd, 0, Iter);
+        ApplyFMA(FirstAccInd + 1, 1, Iter);
+        ApplyFMA(FirstAccInd + 2, 2, Iter);
+    };
+
+
+    for (size_t i = Begin; i < End; i+=GetKernelSize())
+        // Accumulates values to 12 registers
+    {
+        ProcessLoadAndApply(0,i);
+        ProcessLoadAndApply(3,i);
+        ProcessLoadAndApply(6,i);
+        ProcessLoadAndApply(9,i);
     }
 
-#define HorSumAVX(avx_double) ((double*)&avx_double)[0] + ((double*)&avx_double)[1] + ((double*)&avx_double)[2] + ((double*)&avx_double)[3];
-    double RetVal = HorSumAVX(Acc0) + HorSumAVX(Acc1) + HorSumAVX(Acc2) + HorSumAVX(Acc3) + HorSumAVX(Acc4) + HorSumAVX(Acc5) + HorSumAVX(Acc6) + HorSumAVX(Acc7);
-    for (size_t i = VectRange; i < Range; ++i) {
-        RetVal += Src1[i] * Src2[i];
-    }
+    AccRegs[0] += AccRegs[1];
+    AccRegs[2] += AccRegs[3];
+    AccRegs[4] += AccRegs[5];
+    AccRegs[6] += AccRegs[7];
+    AccRegs[8] += AccRegs[9];
+    AccRegs[10] += AccRegs[11];
 
-    return RetVal;
+    AccRegs[0] += AccRegs[2];
+    AccRegs[4] += AccRegs[6];
+    AccRegs[8] += AccRegs[10];
+
+    AccRegs[0] += AccRegs[4];
+    AccRegs[0] += AccRegs[8];
+
+    return HorSum(AccRegs[0]);
 }
+
+// Czas 0.75 * 1024 * 1024 * 1024 wynosil przed 0.5, 10 prob
+// 0.373
+// ten sam przypadek 0.16 dla omp
 
 #endif // __AVX__
-
-#if defined(__AVX__) && defined(__FMA__)
-
-template<>
-DotProductMachineChunked<double>::DotProductMachineChunked(const double* const Src1, const double* const Src2, const unsigned Threads, const size_t Range) :
-        DPMCore<double>(Src1, Src2, Threads, Range, (Range / (Threads * AVXInfo::f64Cap)) * Threads * AVXInfo::f64Cap),
-        ElemPerThread{ Range / (Threads * AVXInfo::f64Cap) }
-{}
-
-template<>
-DotProductMachineChunked<float>::DotProductMachineChunked(const float* const Src1, const float* const Src2, const unsigned Threads, const size_t Range) :
-        DPMCore<float>(Src1, Src2, Threads, Range, (Range / (Threads * AVXInfo::f64Cap)) * Threads * AVXInfo::f64Cap),
-        ElemPerThread{ Range / (Threads * AVXInfo::f32Cap) }
-{}
-
-
-template<>
-void DotProductMachineChunked<double>::StartThread(const unsigned ThreadID) {
-    const auto VectSrc1 = (const __m256d*) Src1;
-    const auto VectSrc2 = (const __m256d*) Src2;
-    __m256d Store = _mm256_set_pd(0, 0, 0, 0);
-    const size_t LoopRange = (ThreadID + 1) * ElemPerThread;
-
-    Counter.arrive_and_wait();
-    for (size_t i = ThreadID * ElemPerThread; i < LoopRange; ++i) {
-        Store = _mm256_fmadd_pd(VectSrc1[i], VectSrc2[i], Store);
-    }
-
-    WriteCounter.arrive_and_wait();
-    auto Result = (double*) &Store;
-    ResultArray[ThreadID] = Result[0] + Result[1] + Result[2] + Result[3];
-}
-
-template<>
-void DotProductMachineChunked<float>::StartThread(const unsigned ThreadID) {
-    Counter.arrive_and_wait();
-    const auto VectSrc1 = (__m256*) Src1;
-    const auto VectSrc2 = (__m256*) Src2;
-    __m256 Store = _mm256_set_ps(0, 0, 0, 0, 0, 0, 0, 0);
-
-    const size_t LoopRange = (ThreadID + 1) * ElemPerThread;
-    for (size_t i = ThreadID * ElemPerThread; i < LoopRange; ++i) {
-        Store = _mm256_fmadd_ps(VectSrc1[i], VectSrc2[i], Store);
-    }
-
-    WriteCounter.arrive_and_wait();
-    auto Result = (float*)&Store;
-    ResultArray[ThreadID] = Result[0] + Result[1] + Result[2] + Result[3] + Result[4] + Result[5] + Result[6] + Result[7];
-}
-
-#define PER_ITERATION_DOUBLE 2
-#define PER_CIRCLE_FLOAT 2
-
-template<>
-DotProductMachineComb<double>::DotProductMachineComb(const double* const Src1, const double* const Src2, const unsigned Threads, const size_t Range) :
-        DPMCore<double>(Src1, Src2, Threads, Range,
-                        (((Range / AVXInfo::f64Cap) * AVXInfo::f64Cap) / PER_ITERATION_DOUBLE) * (CacheInfo::LineSize / PER_ITERATION_DOUBLE)), LoopRange{Range / AVXInfo::f64Cap },
-        PerCircle{PER_ITERATION_DOUBLE }
-{}
-
-template<>
-DotProductMachineComb<float>::DotProductMachineComb(const float* const Src1, const float* const Src2, const unsigned Threads, const size_t Range) :
-        DPMCore<float>(Src1, Src2, Threads, Range, (((Range / AVXInfo::f32Cap) * AVXInfo::f32Cap) / PER_CIRCLE_FLOAT) * PER_CIRCLE_FLOAT), LoopRange{Range / AVXInfo::f32Cap },
-        PerCircle{ PER_CIRCLE_FLOAT }
-{}
-
-#define SingleOP_D(offset) Store = _mm256_fmadd_pd(VectSrc1[i+offset], VectSrc2[i+offset], Store)
-#define SingleOP_F(offset) Store =_mm256_fmadd_ps(VectSrc1[i+offset], VectSrc2[i+offset], Store)
-
-template<>
-void DotProductMachineComb<double>::StartThread(const unsigned ThreadID)
-{
-    const auto VectSrc1 = ((const __m256d*) Src1) + PerCircle * ThreadID;
-    const auto VectSrc2 = ((const __m256d*) Src2) + PerCircle * ThreadID;
-    __m256d Store = _mm256_set_pd(0, 0, 0, 0);
-
-    const unsigned long Jump = Threads * PerCircle;
-    Counter.arrive_and_wait();
-
-    for (unsigned long i = 0; i < LoopRange; i += Jump) {
-        SingleOP_D(0);
-        SingleOP_D(1);
-    }
-
-    WriteCounter.arrive_and_wait();
-
-    double ret = 0;
-    auto result = (double*)&Store;
-
-    for (int i = 0; i < 4; ++i) {
-        ret += result[i];
-    }
-
-    ResultArray[ThreadID] = ret;
-}
-
-
-template<>
-void DotProductMachineComb<float>::StartThread(const unsigned ThreadID)
-{
-    const auto VectSrc1 = ((const __m256*) Src1) + PerCircle * ThreadID;
-    const auto VectSrc2 = ((const __m256*) Src2) + PerCircle * ThreadID;
-    __m256 Store = _mm256_set_ps(0, 0, 0, 0, 0, 0, 0, 0);
-
-    const size_t Jump = Threads * PerCircle;
-    Counter.arrive_and_wait();
-
-    for (size_t i = 0; i < LoopRange; i += Jump) {
-        SingleOP_F(0);
-        SingleOP_F(1);
-    }
-
-    WriteCounter.arrive_and_wait();
-
-    float RetVal = 0;
-    auto RetP = (float*)&Store;
-
-    for (int i = 0; i < 4; ++i) {
-        RetVal += RetP[i];
-    }
-
-    ResultArray[ThreadID] = RetVal;
-}
-
-#endif // __AVX__ __FMA__
 
 // ------------------------------------------
 // Outer product AVX Implementation

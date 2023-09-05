@@ -247,7 +247,7 @@ private:
 public:
 	// Vector and Vector operations
 
-    template<size_t ThreadCap = 8, size_t (*Decider)(size_t) = LinearThreads<ThreadCap>>
+    template<size_t ThreadCap = 20, size_t (*Decider)(size_t) = LinearThreads<ThreadCap>>
     friend NumType operator*(const Vector<NumType>& A, const Vector<NumType>& B){
         if (A.GetIsHorizontal() && !B.GetIsHorizontal()) [[likely]] {
 

@@ -2,6 +2,7 @@
 // Author: Jakub Lisowski
 
 #include <cmath>
+#include <windows.h>
 
 #include "Include/Maintenance/Debuggers.hpp"
 #include "Include/Maintenance/PerfTests.hpp"
@@ -42,7 +43,7 @@ int main() {
 //    Vect V2(length, (double)65, true);
 //
 //    auto M3 = GetOuterProduct(V1, V2);
-    PerformInnerProductTest<true>(1e+9, 10);
+    PerformInnerProductTest<true>(length, 25);
 }
 
 #elif defined DebugMatrix1

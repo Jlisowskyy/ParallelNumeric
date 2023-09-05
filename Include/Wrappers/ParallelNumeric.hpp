@@ -95,6 +95,13 @@ namespace MemoryInfo{
     //TODO: SOLVE PROBLEMS WITH DETECTIONS
 
 
-int FindConsoleWidth(); 
+int FindConsoleWidth();
+
+//template<typename NumType>
+//inline constexpr size_t GetAccCount()
+//    // Used in function initialization, assumes 8 is neutral for compiler loop unrolling in different algorithm
+//{
+//    return 8;
+//}
 
 #endif // PARALLEL_NUMERIC_JLISOWSKYY_H

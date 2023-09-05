@@ -12,7 +12,7 @@
 #include <algorithm>
 #include <mutex>
 
-#include "../Management/ResourceManager.hpp"
+#include "../Management/ThreadSolutions.hpp"
 //#include "MatrixMultiplicationSolutions.hpp"
 
 // ------------------------------------------
@@ -110,136 +110,69 @@ void TransposeMatrixRowStored(NumType* Dst, NumType* Src, size_t SrcLines, size_
 // Dot product code
 // ------------------------------------------
 
-template<typename NumType>
-NumType DotProduct(const NumType* Src1, const NumType* Src2, size_t Range);
-
-#ifdef __AVX__
-
-template<>
-double DotProduct(const double * Src1, const double * Src2, size_t Range);
-
-#endif // __AVX__
-
-// ------------------------------------------
-// Solution 1
-// ------------------------------------------
-
-template<typename NumType>
-class DPMCore{
-protected:
-	const NumType* const Src1;
-	const NumType* const Src2;
-	const unsigned Threads;
-	const size_t Range;
-	const size_t EndIndex;
-	NumType ResultArray[ThreadInfo::MaxCpuThreads] = {NumType() };
-	std::latch Counter;
-	std::latch WriteCounter;
-public:
-	DPMCore(const NumType* const Src1, const NumType* const Src2, unsigned Threads, size_t Range, size_t EndIndex) :
-		Src1{ Src1 }, Src2{ Src2 }, Threads{ Threads }, Range{ Range }, EndIndex{ EndIndex },
-		Counter{ Threads }, WriteCounter{ Threads }
-	{}
-
-	NumType GetResult();
-};
-
-// ------------------------------------------
-// Solution 2
-// ------------------------------------------
-
-template<typename NumType>
-class DotProductMachineChunked: public DPMCore<NumType> {
-	const size_t ElemPerThread;
-public:
-	DotProductMachineChunked(const NumType* const Src1, const NumType* const Src2, unsigned Threads, size_t Range) :
-		ElemPerThread{ Range / (size_t) Threads }, DPMCore<NumType>(Src1, Src2, Threads, Range, (Range / (size_t)Threads) * (size_t)Threads)
-	{}
-
-	void StartThread(unsigned ThreadID);
-};
-
-#if defined(__AVX__) && defined(__FMA__)
-
-template<>
-DotProductMachineChunked<double>::DotProductMachineChunked(const double* Src1, const double* Src2, unsigned Threads, size_t Range);
-
-template<>
-DotProductMachineChunked<float>::DotProductMachineChunked(const float* Src1, const float* Src2, unsigned Threads, size_t Range);
-
-template<>
-void DotProductMachineChunked<double>::StartThread(unsigned ThreadID);
-
-template<>
-void DotProductMachineChunked<float>::StartThread(unsigned ThreadID);
-
-#endif
-
-template<typename NumType>
-class DotProductMachineComb: public DPMCore<NumType> {
-	const size_t LoopRange;
-	const size_t PerCircle = CacheInfo::LineSize / sizeof(NumType);
-public:
-	DotProductMachineComb(const NumType* const Src1, const NumType* const Src2, unsigned Threads, size_t Range) :
-		LoopRange{ Range }, DPMCore<NumType>(Src1, Src2, Threads, Range, (Range / (CacheInfo::LineSize / sizeof(NumType))) * (CacheInfo::LineSize / sizeof(NumType)))
-	{}
-
-	void StartThread(unsigned ThreadID);
-};
-
-#if defined(__AVX__) && defined(__FMA__)
-
-template<>
-DotProductMachineComb<double>::DotProductMachineComb(const double* Src1, const double* Src2, unsigned Threads, size_t Range);
-
-template<>
-DotProductMachineComb<float>::DotProductMachineComb(const float* Src1, const float* Src2, unsigned Threads, size_t Range);
-
-template<>
-void DotProductMachineComb<double>::StartThread(unsigned ThreadID);
-
-template<>
-void DotProductMachineComb<float>::StartThread(unsigned ThreadID);
-
-#endif
-
-// Before Optimisation average time on 10 runs was: 0.25
+// TODO: Przetestuj template z roznymi ilosciami 'rejestrow'
 
 template<typename NumType>
 class DotProductMachine{
+    static constexpr size_t GetKernelSize()
+        // Neutral choice used only in unsupported types
+    {
+        return 8;
+    }
+
+#if defined(__AVX__) && defined(__FMA__)
+    static constexpr size_t AVXAccumulators = 12;
+        //
+#endif
+
     const NumType* const APtr;
     const NumType* const BPtr;
     const size_t Size;
 
+    size_t ElementsPerThread{};
+    void ThreadInstance(size_t ThreadID, NumType* ReturnVal);
+    NumType DotProductAligned(size_t Begin, size_t End);
+    inline NumType DotProductCleaning(size_t BeginOfCleaning);
+    inline NumType DotProduct();
 public:
     DotProductMachine(const NumType* const APtr, const NumType* const BPtr, const size_t Size):
         APtr{ APtr }, BPtr{ BPtr }, Size{ Size } {}
 
     template<size_t ThreadCap = 8, size_t (*Decider)(size_t) = LogarithmicThreads<ThreadCap>>
-    inline NumType Perform(){
-        if (Size < ThreadInfo::ThreadedStartingThreshold) {
-            return DotProduct(APtr, BPtr, Size);
-        }
-        else {
-            const size_t ThreadAmount = Decider(Size * 2);
-            DotProductMachineChunked<NumType> Machine(APtr, BPtr, ThreadAmount, Size);
-
-            ThreadPackage& Threads = ResourceManager::GetThreads();
-            for (size_t i = 0; i < ThreadAmount; ++i) {
-                Threads.Array[i] = new std::thread(&DotProductMachineChunked<NumType>::StartThread, &Machine, i);
-            }
-
-            for (size_t i = 0; i < ThreadAmount; ++i) {
-                Threads.Array[i]->join();
-                delete Threads.Array[i];
-            }
-            Threads.Release();
-
-            return Machine.GetResult();
-        }
-    }
-
+    inline NumType Perform();
 };
+
+template<typename NumType>
+template<size_t ThreadCap, size_t (*Decider)(size_t)>
+NumType DotProductMachine<NumType>::Perform() {
+    if (Size < ThreadInfo::ThreadedStartingThreshold) {
+        return DotProduct();
+    }
+    else {
+        NumType ThreadResult[ThreadCap]{ NumType{} };
+        const size_t ThreadAmount = Decider(Size * 2);
+        ElementsPerThread = (Size / (ThreadAmount * GetKernelSize())) * GetKernelSize();
+
+        ExecuteThreadsWOutput(ThreadResult, ThreadAmount, &DotProductMachine<NumType>::ThreadInstance, this);
+
+        NumType RetVal{};
+        for(auto& Iter : ThreadResult) RetVal += Iter;
+        return RetVal + DotProductCleaning(ElementsPerThread * ThreadAmount);
+    }
+}
+
+#ifdef __AVX__
+
+template<>
+constexpr size_t DotProductMachine<double>::GetKernelSize() {
+    return AVXAccumulators * AVXInfo::f64Cap;
+}
+
+template<>
+double DotProductMachine<double>::DotProductAligned(size_t Begin, size_t End);
+
+#endif // __AVX__
+
 // ------------------------------------------
 // Outer Product
 // ------------------------------------------
@@ -570,79 +503,47 @@ TransposeMatrixRowStored(NumType *Dst, NumType *Src, const size_t SrcLines, cons
 }
 
 // ------------------------------------------
-// Matrix Dot product Implementation
+// Vector Dot Product Implementation
 // ------------------------------------------
 
 template<typename NumType>
-NumType DotProduct(const NumType *const Src1, const NumType *const Src2, const size_t Range) {
-    NumType RetVal = NumType{};
+NumType DotProductMachine<NumType>::DotProductAligned(size_t Begin, size_t End) {
+    NumType Accumulators[GetKernelSize()] {NumType{} };
 
-    for (size_t i = 0; i < Range; i++) {
-        RetVal += Src1[i] * Src2[i];
+    for(size_t i = Begin; i < End; i += GetKernelSize()){
+        for(size_t j = 0; j < GetKernelSize(); ++j){
+            Accumulators[j] += APtr[i + j] * BPtr[i + j];
+        }
     }
 
+    NumType AccSum {};
+    for (auto& Iter : Accumulators) AccSum += Iter;
+    return AccSum;
+}
+
+template<typename NumType>
+inline NumType DotProductMachine<NumType>::DotProductCleaning(size_t BeginOfCleaning) {
+    NumType RetVal{};
+    for (size_t i = BeginOfCleaning; i < Size; ++i){
+        RetVal += APtr[i] * BPtr[i];
+    }
     return RetVal;
 }
 
 template<typename NumType>
-NumType DPMCore<NumType>::GetResult() {
-    NumType Ret = NumType();
-
-    for (size_t i = EndIndex; i < Range; ++i) {
-        Ret += Src1[i] * Src2[i];
-    }
-
-    for (unsigned i = 0; i < Threads; ++i) {
-        Ret += ResultArray[i];
-    }
-
-    return Ret;
+inline NumType DotProductMachine<NumType>::DotProduct()
+    // Works for unsupported types or in case of lack of avx
+{
+    const size_t Range = (Size / GetKernelSize()) * GetKernelSize();
+    return DotProductAligned(0, Range) + DotProductCleaning(Range);
 }
 
 template<typename NumType>
-void DotProductMachineChunked<NumType>::StartThread(unsigned int ThreadID) {
-    NumType Ret = NumType();
-    const NumType* const S1 = DPMCore<NumType>::Src1;
-    const NumType* const S2 = DPMCore<NumType>::Src2;
-    const size_t LoopRange = (ThreadID + 1) * ElemPerThread;
+void DotProductMachine<NumType>::ThreadInstance(size_t ThreadID, NumType* ReturnVal) {
+    size_t Begin = ThreadID * ElementsPerThread;
+    size_t End = (ThreadID + 1) * ElementsPerThread;
 
-    DPMCore<NumType>::Counter.arrive_and_wait();
-    for (size_t i = ThreadID * ElemPerThread; i < LoopRange; ++i) {
-        Ret += S1[i] * S2[i];
-    }
-
-    DPMCore<NumType>::WriteCounter.arrive_and_wait();
-    DPMCore<NumType>::ResultArray[ThreadID] = Ret;
-}
-
-
-#define SingleOPStraight(offset) TempArray[offset] += S1[i + offset] * S2[i + offset]
-
-template<typename T>
-void DotProductMachineComb<T>::StartThread(unsigned int ThreadID) {
-    T* TempArray = new T[PerCircle]{ 0 };
-    const T* const S1 = DPMCore<T>::Src1 + (ThreadID * PerCircle);
-    const T* const S2 = DPMCore<T>::Src2 + (ThreadID * PerCircle);
-
-    const size_t Jump = PerCircle * DPMCore<T>::Threads;
-
-    DPMCore<T>::Counter.arrive_and_wait();
-
-    for (size_t i = 0; i < LoopRange; i += Jump) {
-        for (size_t j = 0; j < PerCircle; ++j) {
-            SingleOPStraight(j);
-        }
-    }
-
-    DPMCore<T>::WriteCounter.arrive_and_wait();
-    T Result = T();
-
-    for (size_t i = 0; i < PerCircle; ++i) {
-        Result += TempArray[i];
-    }
-
-    DPMCore<T>::ResultArray[ThreadID] = Result;
-    delete[] TempArray;
+    *ReturnVal = DotProductAligned(Begin, End);
 }
 
 // ------------------------------------------

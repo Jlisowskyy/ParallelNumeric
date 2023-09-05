@@ -1,5 +1,6 @@
 *.exe
 /**/*
-!/Src/
-!/Include/
-!/Docs/
+!./Src/
+!./Include/
+!./Docs/
+!./Scripts/
