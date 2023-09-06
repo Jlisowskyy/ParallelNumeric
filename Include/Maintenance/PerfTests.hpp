@@ -216,7 +216,7 @@ void PerformVMMTest(size_t OperationCount, unsigned RunsToGo, long Seed = 0){
                     CoDim = std::get<0>(Args).GetCols();
                 }
 
-                return Result.CheckForIntegrity(CoDim * std::get<0>(Args)[0], std::get<1>(Args)[0]);
+                return Result.CheckForIntegrity(CoDim * std::get<0>(Args)[0], std::get<1>(Args)[0], Verb);
             }, Verbose>
             (OperationCount, RunsToGo, Seed);
 }
@@ -234,7 +234,7 @@ void PerformInnerProductTest(size_t VectorSize, unsigned RunsToGo){
                 return std::get<0>(Args) * std::get<1>(Args);
             },
             [](VecP& Args, NumType& Result, bool){
-                NumType ExpectedValue { static_cast<NumType>(std::get<0>(Args).GetSize() * 2) };
+                auto ExpectedValue { static_cast<NumType>(std::get<0>(Args).GetSize() * 2) };
                 bool RetCond { Result == ExpectedValue };
 
                 if constexpr(Verbose){
@@ -247,6 +247,36 @@ void PerformInnerProductTest(size_t VectorSize, unsigned RunsToGo){
                 return RetCond;
             }, Verbose
     >(VectorSize, RunsToGo);
+}
+
+template<bool Verbose = false, D2Pack(*GetDims)(size_t) = Gen2Dims,
+        bool IsResHor = false, bool IsArg1Hor = false, bool IsArg2Hor = false, typename NumType = DefaultNumType>
+void PerformMatrixSumTest(size_t OpCount, unsigned RunsToGo){
+    using MatT = Matrix1<NumType>;
+    using ArgP = std::tuple<MatT, MatT>;
+
+    PerformXXXTest<MatT, MatT, MatT,
+            [](size_t OpCount) -> ArgP{
+                D2Pack Dims { GetDims(OpCount) };
+
+                if constexpr (Verbose){
+                    std::cout << "Generated dims: " << std::get<0>(Dims) << ", " << std::get<1>(Dims) << '\n';
+                }
+
+                NumType Val1 { GenerateNumber(1,500) };
+                NumType Val2 { GenerateNumber(1, 500) };
+
+                return std::make_tuple(MatT(std::get<0>(Dims), std::get<1>(Dims), Val1, IsArg1Hor),
+                                       MatT(std::get<0>(Dims), std::get<1>(Dims), Val2, IsArg2Hor));
+            },
+            [](ArgP& Args) -> MatT{
+                return std::get<0>(Args) + std::get<1>(Args);
+            },
+            [](ArgP& Args, MatT& Result, bool Verb){
+                NumType ExpectedValue { std::get<0>(Args)[0] + std::get<1>(Args)[0] };
+                return Result.CheckForIntegrity(ExpectedValue, Verb);
+            }, Verbose
+    >(OpCount, RunsToGo);
 }
 
 #endif

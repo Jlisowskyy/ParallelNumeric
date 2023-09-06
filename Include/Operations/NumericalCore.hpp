@@ -20,82 +20,60 @@
 // ------------------------------------------
 
 template<typename NumType>
-void MatrixSumHelperAlignedArrays(NumType*Target, const NumType* Input1, const NumType* Input2, size_t Elements);
-// Function used to Sum matrices
+class MatrixSumMachine{
+    const NumType* const MatA;
+    const NumType* const MatB;
+    NumType* const MatC;
+
+    const size_t Rows;
+    const size_t Cols;
+    const size_t Size; // Used for aligned arrays
+    size_t DimToDivide{};
+    size_t ElementsPerThread{};
+    size_t CleanBegin{};
+
+    const size_t MatASoL;
+    const size_t MatBSoL;
+    const size_t MatCSoL;
+
+    void (MatrixSumMachine<NumType>::*BlockFunc)(size_t, size_t) {};
+    void (MatrixSumMachine<NumType>::*FrameFunc)(size_t) {};
+    std::mutex FrameGuard;
+    bool FrameDone = false;
+
+    void AlignedArrays(size_t Begin, size_t End);
+    void AlignedArraysCleaning(size_t Begin);
+
+    void RCBlockedByCols(size_t StartCol, size_t StopCol);
+    void RCBlockedByRows(size_t StartRow, size_t StopRow);
+    void CRBlockedByCols(size_t StartCol, size_t StopCol);
+    void CRBlockedByRows(size_t StartRow, size_t StopRow);
+
+    void RCBlockedByColsFrame(size_t StartCol);
+    void RCBlockedByRowsFrame(size_t StartRow);
+    void CRBlockedByColsFrame(size_t StartCol);
+    void CRBlockedByRowsFrame(size_t StartRow);
+
+    void ThreadInstance(size_t ThreadID);
+
+    inline void UnalignedArraysMatchingFunctions(bool IsAHor, bool IsBHor, bool IsCHor);
+public:
+    MatrixSumMachine(const NumType* MatA, const NumType* MatB, NumType* MatC, size_t Rows, size_t Cols, size_t Size,
+                     size_t MatASoL, size_t MatBSoL, size_t MatCSoL, bool IsAHor, bool IsBHor, bool IsCHor);
+
+    template<size_t ThreadCap = 20, size_t (*Decider)(size_t) = LogarithmicThreads<ThreadCap>>
+    inline void Perform();
+};
 
 #ifdef __AVX__
-//defined(__AVX__) && defined(__FMA__)
-template<>
-void MatrixSumHelperAlignedArrays(double* Target,const double* const Input1, const double* const Input2, const size_t Elements);
 
 template<>
-void MatrixSumHelperAlignedArrays(float* Target, const float* const Input1, const float* const Input2, const size_t Elements);
+void MatrixSumMachine<double>::AlignedArrays(size_t Begin, size_t End);
+
+template<>
+void MatrixSumMachine<float>::AlignedArrays(size_t Begin, size_t End);
 
 #endif // __AVX__
-
-template<typename NumType>
-void MatrixSumHelperNotAlignedArrays_RC_DivByCols(NumType* Target, const NumType* Input1, const NumType* Input2,
-                                                  size_t StartCol, size_t StopCol, size_t Rows,
-                                                  size_t TargetSizeOfLine, size_t Input1SizeOfLine, size_t Input2SizeOfLine);
-
-template<typename NumType>
-void MatrixSumHelperNotAlignedArrays_RC_DivByRows(NumType* Target, const NumType* Input1, const NumType* Input2,
-                                                  size_t StartRow, size_t StopRow, size_t Cols,
-                                                  size_t TargetSizeOfLine, size_t Input1SizeOfLine, size_t Input2SizeOfLine);
-
-template<typename NumType>
-void MatrixSumHelperNotAlignedArrays_CR_DivByCols(NumType* Target, const NumType* Input1, const NumType* Input2,
-                                                  size_t StartCol, size_t StopCol, size_t Rows,
-                                                  size_t TargetSizeOfLine, size_t Input1SizeOfLine, size_t Input2SizeOfLine);
-
-template<typename NumType>
-void MatrixSumHelperNotAlignedArrays_CR_DivByRows(NumType* Target, const NumType* Input1, const NumType* Input2,
-                                                  size_t StartRow, size_t StopRow, size_t Cols,
-                                                  size_t TargetSizeOfLine, size_t Input1SizeOfLine, size_t Input2SizeOfLine);
-
-template<typename NumType>
-void MatrixSumHelperNotAlignedArrays_CR_DivByCols_Frame(NumType* Target, const NumType* Input1, const NumType* Input2,
-                                                        size_t StartCol, size_t StopCol, size_t Rows,
-                                                        size_t TargetSizeOfLine, size_t Input1SizeOfLine, size_t Input2SizeOfLine);
-
-template<typename NumType>
-void MatrixSumHelperNotAlignedArrays_CR_DivByRows_Frame(NumType* Target, const NumType* Input1, const NumType* Input2,
-                                                        size_t StartRow, size_t StopRow, size_t Cols,
-                                                        size_t TargetSizeOfLine, size_t Input1SizeOfLine, size_t Input2SizeOfLine);
-
-template<typename NumType>
-void MatrixSumHelperNotAlignedArrays_RC_DivByRows_Frame(NumType* Target, const NumType* Input1, const NumType* Input2,
-                                                        size_t StartRow, size_t StopRow, size_t Cols,
-                                                        size_t TargetSizeOfLine, size_t Input1SizeOfLine, size_t Input2SizeOfLine);
-
-template<typename NumType>
-void MatrixSumHelperNotAlignedArrays_RC_DivByCols_Frame(NumType* Target, const NumType* Input1, const NumType* Input2,
-                                                        size_t StartCol, size_t StopCol, size_t Rows,
-                                                        size_t TargetSizeOfLine, size_t Input1SizeOfLine, size_t Input2SizeOfLine);
-
-//#define I2A(offset) Input2[(i + z + offset) * Input2SizeOfLine + (j + k)]
-//
-//template<>
-//void MatrixSumHelperNotAlignedArrays_CR(double* Target, double* Input1, double* Input2, unsigned StartCol, unsigned StopCol, unsigned Rows,
-//	unsigned TargetSizeOfLine, unsigned Input1SizeOfLine, unsigned Input2SizeOfLine) {
-//
-//	unsigned BlockSize = CACHE_LINE / sizeof(double);
-//	unsigned VectorsInCacheLine = 2;
-//
-//	for (unsigned i = 0; i < Rows; i += BlockSize) {
-//		for (unsigned j = StartCol; j < StopCol; j += BlockSize) {
-//			for (unsigned k = 0; k < BlockSize; ++k) {
-//				__m256d* VectTarget = (__m256d*) (Target + (j + k) * TargetSizeOfLine + i);
-//				__m256d* VectInput1 = (__m256d*) (Input1 + (j + k) * Input1SizeOfLine + i);
-//
-//				for (unsigned z = 0; z < VectorsInCacheLine; ++z) {
-//					VectTarget[z] = _mm256_add_pd(VectInput1[z],
-//						_mm256_set_pd(I2A(0), I2A(1), I2A(2), I2A(3)));
-//				}
-//			}
-//		}
-//	}
-//}
 
 // ------------------------------------------
 // Matrix transposition solutions
@@ -248,32 +226,107 @@ void VMM<double>::CMVKernel12x4(size_t HorizontalCord, size_t VerticalCord);
 // Matrix Sum Implementation
 // ------------------------------------------
 
-template<typename T>
-void MatrixSumHelperAlignedArrays(T *const Target, const T *const Input1, const T *const Input2,
-                                  const size_t Elements) {
-    for (unsigned long i = 0; i < Elements; ++i)
-        Target[i] = Input1[i] + Input2[i];
+
+template<typename NumType>
+void MatrixSumMachine<NumType>::UnalignedArraysMatchingFunctions(bool IsAHor, bool IsBHor, bool IsCHor) {
+    static constexpr size_t InequalityThreshold = 50;
+    using MachT = MatrixSumMachine<NumType>;
+
+    if (IsAHor){
+        if (Rows > InequalityThreshold * Cols){
+            BlockFunc = &MachT::RCBlockedByRows;
+            FrameFunc = &MachT::RCBlockedByRowsFrame;
+            DimToDivide = Rows;
+        }
+        else{
+            BlockFunc = &MachT::RCBlockedByCols;
+            FrameFunc = &MachT::RCBlockedByColsFrame;
+            DimToDivide = Cols;
+        }
+    }
+    else{
+        if (Rows > InequalityThreshold * Cols){
+            BlockFunc = &MachT::CRBlockedByRows;
+            FrameFunc = &MachT::CRBlockedByRowsFrame;
+            DimToDivide = Rows;
+        }
+        else{
+            BlockFunc = &MachT::CRBlockedByCols;
+            FrameFunc = &MachT::CRBlockedByColsFrame;
+            DimToDivide = Cols;
+        }
+    }
 }
 
 template<typename NumType>
-void MatrixSumHelperNotAlignedArrays_RC_DivByCols(NumType *Target, const NumType *const Input1, const NumType *const Input2,
-                                                  const size_t StartCol, const size_t StopCol,
-                                                  const size_t Rows, const size_t TargetSizeOfLine,
-                                                  const size_t Input1SizeOfLine,
-                                                  const size_t Input2SizeOfLine)
-// Function assumes that passed Start and StopCol ale divisible by NumType corresponding length of cache line;
-// otherwise, behavior is undefined.
-// Also, all data pointers should be aligned to cache lines;
-// otherwise, the operation may be much slower.
+MatrixSumMachine<NumType>::MatrixSumMachine(const NumType * const MatA, const NumType * const MatB, NumType * const MatC,
+                                            const size_t Rows, const size_t Cols, const size_t Size, const size_t MatASoL,
+                                            const size_t MatBSoL, size_t MatCSoL, const bool IsAHor, const bool IsBHor, const bool IsCHor):
+        MatA{ MatA }, MatB{ MatB }, MatC{ MatC }, Rows{ Rows }, Cols{ Cols },  MatASoL { MatASoL }, MatBSoL{ MatBSoL },
+        MatCSoL{ MatCSoL }, Size { Size }
 {
-    const size_t ElementsInCacheLine = CacheInfo::LineSize / sizeof(NumType);
+    if (IsAHor != IsBHor){
+        UnalignedArraysMatchingFunctions(IsAHor, IsBHor, IsCHor);
+    }
+    else{
+        BlockFunc = &MatrixSumMachine<NumType>::AlignedArrays;
+        FrameFunc = &MatrixSumMachine<NumType>::AlignedArraysCleaning;
+        DimToDivide = Size;
+    }
+}
+
+template<typename NumType>
+template<size_t ThreadCap, size_t (*Decider)(size_t)>
+void MatrixSumMachine<NumType>::Perform() {
+    if (Size < ThreadInfo::ThreadedStartingThreshold){
+        const size_t Range = (DimToDivide / GetCacheLineElem<NumType>()) * GetCacheLineElem<NumType>();
+        (this->*BlockFunc)(0, Range);
+        (this->*FrameFunc)(Range);
+    }
+    else{
+        const size_t ThreadAmount = Decider(Size);
+        ElementsPerThread = ((DimToDivide / GetCacheLineElem<NumType>()) / ThreadAmount) * GetCacheLineElem<NumType>();
+        CleanBegin = ElementsPerThread * ThreadAmount;
+
+        ExecuteThreads(ThreadAmount, &MatrixSumMachine<NumType>::ThreadInstance, this);
+    }
+}
+
+template<typename NumType>
+void MatrixSumMachine<NumType>::ThreadInstance(const size_t ThreadID) {
+    const size_t StartPos = ThreadID * ElementsPerThread;
+    const size_t StopPos = (ThreadID + 1) * ElementsPerThread;
+
+    (this->*BlockFunc)(StartPos, StopPos);
+
+    if (!FrameDone && FrameGuard.try_lock()){
+        (this->*FrameFunc)(CleanBegin);
+        FrameGuard.unlock();
+    }
+}
+
+template<typename NumType>
+void MatrixSumMachine<NumType>::AlignedArrays(size_t Begin, size_t End){
+    for (size_t i = Begin; i < End; ++i)
+        MatC[i] = MatA[i] + MatB[i];
+}
+
+template<typename NumType>
+void MatrixSumMachine<NumType>::AlignedArraysCleaning(size_t Begin) {
+    for (size_t i = Begin; i < Size; ++i)
+        MatC[i] = MatA[i] + MatB[i];
+}
+
+template<typename NumType>
+void MatrixSumMachine<NumType>::RCBlockedByCols(size_t StartCol, size_t StopCol) {
+    static constexpr size_t ElementsInCacheLine = GetCacheLineElem<NumType>();
     const size_t RowsRange = ((size_t)(Rows / ElementsInCacheLine)) * ElementsInCacheLine;
 
     for (size_t i = 0; i < RowsRange; i += ElementsInCacheLine) {
         for (size_t j = StartCol; j < StopCol; j += ElementsInCacheLine) {
             for (size_t k = 0; k < ElementsInCacheLine; ++k) {
                 for (size_t z = 0; z < ElementsInCacheLine; ++z) {
-                    Target[(i + z) * TargetSizeOfLine + j + k] = Input1[(i + z) * Input1SizeOfLine + j + k] + Input2[(j + k) * Input2SizeOfLine + i + z];
+                    MatC[(i + z) * MatCSoL + j + k] = MatA[(i + z) * MatASoL + j + k] + MatB[(j + k) * MatBSoL + i + z];
                 }
             }
         }
@@ -282,31 +335,22 @@ void MatrixSumHelperNotAlignedArrays_RC_DivByCols(NumType *Target, const NumType
     for (size_t i = StartCol; i < StopCol; ++i) {
         for (size_t j = RowsRange; j < Rows; ++j) {
             for (size_t k = 0; k < ElementsInCacheLine; ++k) {
-                Target[j * TargetSizeOfLine + i + k] = Input1[j * Input1SizeOfLine + i + k] + Input2[(i + k) * Input2SizeOfLine + j];
+                MatC[j * MatCSoL + i + k] = MatA[j * MatASoL + i + k] + MatB[(i + k) * MatBSoL + j];
             }
         }
     }
 }
 
 template<typename NumType>
-void
-MatrixSumHelperNotAlignedArrays_RC_DivByRows(NumType *Target, const NumType *const Input1, const NumType *const Input2,
-                                             const size_t StartRow, const size_t StopRow,
-                                             const size_t Cols, const size_t TargetSizeOfLine,
-                                             const size_t Input1SizeOfLine, const size_t Input2SizeOfLine)
-// Function assumes that passed Start and StopCol ale divisible by NumType corresponding length of cache line;
-// otherwise, behavior is undefined.
-// Also, all data pointers should be aligned to cache lines;
-// otherwise, the operation may be much slower.
-{
-    const size_t ElementsInCacheLine = CacheInfo::LineSize / sizeof(NumType);
+void MatrixSumMachine<NumType>::RCBlockedByRows(size_t StartRow, size_t StopRow) {
+    static constexpr size_t ElementsInCacheLine = GetCacheLineElem<NumType>();
     const size_t ColsRange = ((size_t)(Cols / ElementsInCacheLine)) * ElementsInCacheLine;
 
     for (size_t j = StartRow; j < StopRow; j += ElementsInCacheLine) {
         for (size_t i = 0; i < ColsRange; i += ElementsInCacheLine) {
             for (size_t k = 0; k < ElementsInCacheLine; ++k) {
                 for (size_t z = 0; z < ElementsInCacheLine; ++z) {
-                    Target[(j + k) * TargetSizeOfLine + i + z] = Input1[(j + k) * Input1SizeOfLine + i + z] + Input2[(i + z) * Input2SizeOfLine + j + k];
+                    MatC[(j + k) * MatCSoL + i + z] = MatA[(j + k) * MatASoL + i + z] + MatB[(i + z) * MatBSoL + j + k];
                 }
             }
         }
@@ -314,30 +358,21 @@ MatrixSumHelperNotAlignedArrays_RC_DivByRows(NumType *Target, const NumType *con
 
     for (unsigned j = StartRow; j < StopRow; ++j) {
         for (unsigned i = ColsRange; i < Cols; ++i) {
-            Target[j * TargetSizeOfLine + i] = Input1[j * Input1SizeOfLine + i] + Input2[i * Input2SizeOfLine + j];
+            MatC[j * MatCSoL + i] = MatA[j * MatASoL + i] + MatB[i * MatBSoL + j];
         }
     }
 
 }
 
 template<typename NumType>
-void
-MatrixSumHelperNotAlignedArrays_CR_DivByCols(NumType *Target, const NumType *const Input1, const NumType *const Input2,
-                                             const size_t StartCol, const size_t StopCol,
-                                             const size_t Rows, const size_t TargetSizeOfLine,
-                                             const size_t Input1SizeOfLine, const size_t Input2SizeOfLine)
-// Function assumes that passed Start and StopCol ale divisible by NumType corresponding length of cache line;
-// otherwise, behavior is undefined.
-// Also, all data pointers should be aligned to cache lines;
-// otherwise, the operation may be much slower.
-{
-    const size_t ElementsInCacheLine = CacheInfo::LineSize / sizeof(NumType);
+void MatrixSumMachine<NumType>::CRBlockedByCols(size_t StartCol, size_t StopCol) {
+    static constexpr size_t ElementsInCacheLine = GetCacheLineElem<NumType>();
     const size_t RowsRange = ((size_t) (Rows / ElementsInCacheLine)) * ElementsInCacheLine;
     for (size_t j = StartCol; j < StopCol; j += ElementsInCacheLine) {
         for (size_t i = 0; i < RowsRange; i += ElementsInCacheLine) {
             for (size_t k = 0; k < ElementsInCacheLine; ++k) {
                 for (size_t z = 0; z < ElementsInCacheLine; ++z) {
-                    Target[(j + k) * TargetSizeOfLine + i + z] = Input1[(j + k) * Input1SizeOfLine + i + z] + Input2[(i + z) * Input2SizeOfLine + j + k];
+                    MatC[(j + k) * MatCSoL + i + z] = MatA[(j + k) * MatASoL + i + z] + MatB[(i + z) * MatBSoL + j + k];
                 }
             }
         }
@@ -345,30 +380,21 @@ MatrixSumHelperNotAlignedArrays_CR_DivByCols(NumType *Target, const NumType *con
 
     for (size_t j = StartCol; j < StopCol; ++j) {
         for (size_t z = RowsRange; z < Rows; ++z) {
-            Target[j * TargetSizeOfLine + z] = Input1[j * Input1SizeOfLine + z] + Input2[z * Input2SizeOfLine + j];
+            MatC[j * MatCSoL + z] = MatA[j * MatASoL + z] + MatB[z * MatBSoL + j];
         }
     }
 }
 
 template<typename NumType>
-void
-MatrixSumHelperNotAlignedArrays_CR_DivByRows(NumType *Target, const NumType *const Input1, const NumType *const Input2,
-                                             const size_t StartRow, const size_t StopRow,
-                                             const size_t Cols, const size_t TargetSizeOfLine,
-                                             const size_t Input1SizeOfLine, const size_t Input2SizeOfLine)
-// Function assumes that passed Start and StopCol ale divisible by NumType corresponding length of cache line;
-// otherwise, behavior is undefined.
-// Also, all data pointers should be aligned to cache lines;
-// otherwise, the operation may be much slower.
-{
-    const size_t ElementsInCacheLine = CacheInfo::LineSize / sizeof(NumType);
+void MatrixSumMachine<NumType>::CRBlockedByRows(size_t StartRow, size_t StopRow) {
+    static constexpr size_t ElementsInCacheLine = GetCacheLineElem<NumType>();
     const size_t ColsRange = ((size_t)(Cols / ElementsInCacheLine)) * ElementsInCacheLine;
 
     for (size_t i = 0; i < ColsRange; i += ElementsInCacheLine) {
         for (size_t j = StartRow; j < StopRow; j += ElementsInCacheLine) {
             for (size_t k = 0; k < ElementsInCacheLine; ++k) {
                 for (size_t z = 0; z < ElementsInCacheLine; ++z) {
-                    Target[(i + k) * TargetSizeOfLine + j + z] = Input1[(i + k) * Input1SizeOfLine + j + z] + Input2[(j + z) * Input2SizeOfLine + i + k];
+                    MatC[(i + k) * MatCSoL + j + z] = MatA[(i + k) * MatASoL + j + z] + MatB[(j + z) * MatBSoL + i + k];
                 }
             }
         }
@@ -377,113 +403,95 @@ MatrixSumHelperNotAlignedArrays_CR_DivByRows(NumType *Target, const NumType *con
     for (size_t i = StartRow; i < StopRow; i += ElementsInCacheLine) {
         for (size_t z = ColsRange; z < Cols; ++z) {
             for (size_t k = 0; k < ElementsInCacheLine; ++k)
-                Target[z * TargetSizeOfLine + i + k] = Input1[z * Input1SizeOfLine + i + k] + Input2[(i + k) * Input2SizeOfLine + z];
+                MatC[z * MatCSoL + i + k] = MatA[z * MatASoL + i + k] + MatB[(i + k) * MatBSoL + z];
         }
     }
 }
 
 template<typename NumType>
-void MatrixSumHelperNotAlignedArrays_CR_DivByCols_Frame(NumType *Target, const NumType *const Input1,
-                                                        const NumType *const Input2, const size_t StartCol,
-                                                        const size_t StopCol, const size_t Rows,
-                                                        const size_t TargetSizeOfLine,
-                                                        const size_t Input1SizeOfLine,
-                                                        const size_t Input2SizeOfLine) {
-    if (StartCol == StopCol) return;
+void MatrixSumMachine<NumType>::RCBlockedByColsFrame(size_t StartCol) {
+    if (StartCol == Cols) return;
 
-    const size_t ElementsInCacheLine = CacheInfo::LineSize / sizeof(NumType);
-    const size_t RowsRange = ((size_t)(Rows / ElementsInCacheLine)) * ElementsInCacheLine;
-
-    for (size_t i = 0; i < RowsRange; i += ElementsInCacheLine) {
-        for (size_t k = StartCol; k < StopCol; ++k) {
-            for (size_t j = 0; j < ElementsInCacheLine; ++j) {
-                Target[k * TargetSizeOfLine + i + j] = Input1[k * Input1SizeOfLine + i + j] + Input2[(i + j) * Input2SizeOfLine + k];
-            }
-        }
-    }
-
-    for (size_t i = RowsRange; i < Rows; ++i) {
-        for (size_t k = StartCol; k < StopCol; ++k) {
-            Target[k * TargetSizeOfLine + i] = Input1[k * Input1SizeOfLine + i] + Input2[i * Input2SizeOfLine + k];
-        }
-    }
-}
-
-template<typename NumType>
-void MatrixSumHelperNotAlignedArrays_CR_DivByRows_Frame(NumType *Target, const NumType *const Input1,
-                                                        const NumType *const Input2, const size_t StartRow,
-                                                        const size_t StopRow, const size_t Cols,
-                                                        const size_t TargetSizeOfLine,
-                                                        const size_t Input1SizeOfLine,
-                                                        const size_t Input2SizeOfLine) {
-    if (StartRow == StopRow) return;
-
-    const size_t ElementsInCacheLine = CacheInfo::LineSize / sizeof(NumType);
-    const size_t ColsRange = ((size_t)(Cols / ElementsInCacheLine)) * ElementsInCacheLine;
-
-    for (size_t i = 0; i < ColsRange; i += ElementsInCacheLine) {
-        for (size_t j = 0; j < ElementsInCacheLine; ++j) {
-            for (size_t k = StartRow; k < StopRow; ++k) {
-                Target[(i + j) * TargetSizeOfLine + k] = Input1[(i + j) * Input1SizeOfLine + k] + Input2[k * Input2SizeOfLine + i + j];
-            }
-        }
-    }
-
-    for (size_t i = ColsRange; i < Cols; ++i) {
-        for (size_t k = StartRow; k < StopRow; ++k) {
-            Target[i * TargetSizeOfLine + k] = Input1[i * Input1SizeOfLine + k] + Input2[k * Input2SizeOfLine + i];
-        }
-    }
-}
-
-template<typename NumType>
-void MatrixSumHelperNotAlignedArrays_RC_DivByRows_Frame(NumType *Target, const NumType *Input1, const NumType *Input2,
-                                                        const size_t StartRow, const size_t StopRow, const size_t Cols,
-                                                        const size_t TargetSizeOfLine, const size_t Input1SizeOfLine,
-                                                        const size_t Input2SizeOfLine) {
-    if (StartRow == StopRow) return;
-
-    const size_t ElementsInCacheLine = CacheInfo::LineSize / sizeof(NumType);
-    const size_t ColsRange = ((size_t)(Cols / ElementsInCacheLine)) * ElementsInCacheLine;
-
-    for (size_t i = 0; i < ColsRange; i += ElementsInCacheLine) {
-        for (size_t j = 0; j < ElementsInCacheLine; ++j) {
-            for (size_t k = StartRow; k < StopRow; ++k) {
-                Target[(i + j) * TargetSizeOfLine + k] = Input1[(i + j) * Input1SizeOfLine + k] + Input2[k * Input2SizeOfLine + i + j];
-            }
-        }
-    }
-
-    for (size_t i = ColsRange; i < Cols; ++i) {
-        for (size_t k = StartRow; k < StopRow; ++k) {
-            Target[i * TargetSizeOfLine + k] = Input1[i * Input1SizeOfLine + k] + Input2[k * Input2SizeOfLine + i];
-        }
-    }
-}
-
-template<typename NumType>
-void MatrixSumHelperNotAlignedArrays_RC_DivByCols_Frame(NumType *Target, const NumType *const Input1,
-                                                        const NumType *const Input2, const size_t StartCol,
-                                                        const size_t StopCol, const size_t Rows,
-                                                        const size_t TargetSizeOfLine,
-                                                        const size_t Input1SizeOfLine,
-                                                        const size_t Input2SizeOfLine) {
-    if (StartCol == StopCol) return;
-
-    const size_t ElementsInCacheLine = CacheInfo::LineSize / sizeof(NumType);
+    static constexpr size_t ElementsInCacheLine = GetCacheLineElem<NumType>();
     const size_t RowsRange = ((size_t)(Rows / ElementsInCacheLine)) * ElementsInCacheLine;
 
     for (size_t i = 0; i < RowsRange; i+= ElementsInCacheLine) {
-        for (size_t k = StartCol; k < StopCol; ++k) {
+        for (size_t k = StartCol; k < Cols; ++k) {
             for (size_t j = 0; j < ElementsInCacheLine; ++j) {
-                Target[(i + j) * TargetSizeOfLine + k] = Input1[(i + j) * Input1SizeOfLine + k] + Input2[k * Input2SizeOfLine + i + j];
+                MatC[(i + j) * MatCSoL + k] = MatA[(i + j) * MatASoL + k] + MatB[k * MatBSoL + i + j];
             }
         }
     }
 
     for (size_t i = RowsRange; i < Rows; ++i) {
-        for (size_t j = StartCol; j < StopCol; ++j)
-            Target[i * TargetSizeOfLine + j] = Input1[i * TargetSizeOfLine + j] + Input2[j * TargetSizeOfLine + i];
+        for (size_t j = StartCol; j < Cols; ++j)
+            MatC[i * MatCSoL + j] = MatA[i * MatCSoL + j] + MatB[j * MatCSoL + i];
+    }
+}
+
+template<typename NumType>
+void MatrixSumMachine<NumType>::RCBlockedByRowsFrame(size_t StartRow) {
+    if (StartRow == Rows) return;
+
+    static constexpr size_t ElementsInCacheLine = GetCacheLineElem<NumType>();
+    const size_t ColsRange = ((size_t)(Cols / ElementsInCacheLine)) * ElementsInCacheLine;
+
+    for (size_t i = 0; i < ColsRange; i += ElementsInCacheLine) {
+        for (size_t j = 0; j < ElementsInCacheLine; ++j) {
+            for (size_t k = StartRow; k < Rows; ++k) {
+                MatC[(i + j) * MatCSoL + k] = MatA[(i + j) * MatASoL + k] + MatB[k * MatBSoL + i + j];
+            }
+        }
+    }
+
+    for (size_t i = ColsRange; i < Cols; ++i) {
+        for (size_t k = StartRow; k < Rows; ++k) {
+            MatC[i * MatCSoL + k] = MatA[i * MatASoL + k] + MatB[k * MatBSoL + i];
+        }
+    }
+}
+
+template<typename NumType>
+void MatrixSumMachine<NumType>::CRBlockedByColsFrame(size_t StartCol) {
+    if (StartCol == Cols) return;
+
+    static constexpr size_t ElementsInCacheLine = GetCacheLineElem<NumType>();
+    const size_t RowsRange = ((size_t) (Rows / ElementsInCacheLine)) * ElementsInCacheLine;
+
+    for (size_t i = 0; i < RowsRange; i += ElementsInCacheLine) {
+        for (size_t k = StartCol; k < Cols; ++k) {
+            for (size_t j = 0; j < ElementsInCacheLine; ++j) {
+                MatC[k * MatCSoL + i + j] = MatA[k * MatASoL + i + j] + MatB[(i + j) * MatBSoL + k];
+            }
+        }
+    }
+
+    for (size_t i = RowsRange; i < Rows; ++i) {
+        for (size_t k = StartCol; k < Cols; ++k) {
+            MatC[k * MatCSoL + i] = MatA[k * MatASoL + i] + MatB[i * MatBSoL + k];
+        }
+    }
+}
+
+template<typename NumType>
+void MatrixSumMachine<NumType>::CRBlockedByRowsFrame(size_t StartRow) {
+    if (StartRow == Rows) return;
+
+    const size_t ElementsInCacheLine = CacheInfo::LineSize / sizeof(NumType);
+    const size_t ColsRange = ((size_t)(Cols / ElementsInCacheLine)) * ElementsInCacheLine;
+
+    for (size_t i = 0; i < ColsRange; i += ElementsInCacheLine) {
+        for (size_t j = 0; j < ElementsInCacheLine; ++j) {
+            for (size_t k = StartRow; k < Rows; ++k) {
+                MatC[(i + j) * MatCSoL + k] = MatA[(i + j) * MatASoL + k] + MatB[k * MatBSoL + i + j];
+            }
+        }
+    }
+
+    for (size_t i = ColsRange; i < Cols; ++i) {
+        for (size_t k = StartRow; k < Rows; ++k) {
+            MatC[i * MatCSoL + k] = MatA[i * MatASoL + k] + MatB[k * MatBSoL + i];
+        }
     }
 }
 

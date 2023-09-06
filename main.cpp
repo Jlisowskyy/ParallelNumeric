@@ -35,15 +35,10 @@ int main(){
 
 using typior = double;
 constexpr size_t length = (512 + 256) * 1024 * 1024;
+constexpr size_t size = 24000;
 
 int main() {
-//    PerformVMMTest<double, [](size_t) -> D3Pack { return { 36000, 40960, length }; }>(1600000000, 20, 0, true, true);
-//    PerformOPTest<double, [](size_t) -> D3Pack { return { length, length, length }; }>(1600000000, 10, 0, true, true);
-//    Vect V1(length, (double)1, false);
-//    Vect V2(length, (double)65, true);
-//
-//    auto M3 = GetOuterProduct(V1, V2);
-    PerformInnerProductTest<true>(length, 25);
+
 }
 
 #elif defined DebugMatrix1

@@ -1,6 +1,6 @@
 *.exe
-/**/*
-!./Src/
-!./Include/
-!./Docs/
-!./Scripts/
+cmake-*/
+.*
+gcc-rel/
+temp/
+asm/

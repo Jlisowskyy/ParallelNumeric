@@ -24,10 +24,16 @@ template<typename NumType, size_t ThreadCap = 20, size_t (*Decider)(size_t) = Lo
 inline Matrix1<NumType> GetOuterProduct(const Vector<NumType>& A, const Vector<NumType>& B, bool HorizontalReturn = false);
 
 template<typename NumT>
-inline OPM<NumT> GetOPM(const Vector<NumT>& A, const Vector<NumT>& B, Matrix1<NumT>& C, bool IsHor);
+inline OPM<NumT> GetOPM(const Vector<NumT>& A, const Vector<NumT>& B, Matrix1<NumT>& C);
 
 template<typename NumT>
 inline VMM<NumT> GetVMM(const Matrix1<NumT>& Mat, const Vector<NumT>& Vect, Vector<NumT>& RetVect);
+
+template<typename NumT>
+inline MatrixSumMachine<NumT> GetMSM(const Matrix1<NumT>& MatA, const Matrix1<NumT>& MatB, Matrix1<NumT>& MatC);
+
+template<typename NumT>
+inline GPMM<NumT> GetMultMachine(const Matrix1<NumT>& A, const Matrix1<NumT>& B, const Matrix1<NumT>& C);
 
 template<typename NumType>
 class Matrix1 : public Vector<NumType>
@@ -79,19 +85,22 @@ class Matrix1 : public Vector<NumType>
 		}
 	}
 
-	void OptimizeResourceManagement(NumType* InitVal = nullptr);
+	void OptimizeResourceManagement();
 	void SetupAccess();
-	void MoveFromPointer(NumType* Src);
+	void MoveFromPointer(NumType *Src, size_t SrcSoL = 0);
 public:
-	Matrix1(size_t NNSize, bool ByRow = false, ResourceManager* MM = DefaultMM) noexcept;
-	Matrix1(size_t Rows, size_t Cols, bool ByRow = false, ResourceManager* MM = DefaultMM) noexcept;
-	Matrix1(size_t NNSize, NumType InitVal, bool ByRow = false, ResourceManager* MM = DefaultMM) noexcept;
-	Matrix1(size_t Rows, size_t Cols, NumType InitVal, bool ByRow = false, ResourceManager* MM = DefaultMM) noexcept;
+    // Basic constructors:
+    Matrix1(size_t Rows, size_t Cols, bool ByRow = false, ResourceManager* MM = DefaultMM);
+    Matrix1(std::initializer_list<std::initializer_list<NumType>> Init, bool ByRow = false, ResourceManager* MM = DefaultMM);
+    Matrix1(size_t Rows, size_t Cols, const NumType* Init, bool ByRow = false, ResourceManager* MM = DefaultMM);
 	Matrix1(const Matrix1& Target) noexcept;
 	Matrix1(Matrix1&& Target) noexcept;
-	Matrix1(std::initializer_list<std::initializer_list<NumType>> Init, bool ByRow = false, ResourceManager* MM = DefaultMM) noexcept;
+
+    // Actually delegates construction to one of the above ones
+    Matrix1(size_t Rows, size_t Cols, NumType InitVal, bool ByRow = false, ResourceManager* MM = DefaultMM);
+    Matrix1(size_t NNSize, bool ByRow = false, ResourceManager* MM = DefaultMM);
+    Matrix1(size_t NNSize, NumType InitVal, bool ByRow = false, ResourceManager* MM = DefaultMM);
 	Matrix1(size_t NNSize, const NumType* Init, bool ByRow = false, ResourceManager* MM = DefaultMM);
-	Matrix1(size_t Rows, size_t Cols, const NumType* Init, bool ByRow = false, ResourceManager* MM = DefaultMM);
 
 	// Data accessing operators
 
@@ -169,142 +178,25 @@ public:
 		return *this = GetTransposed(*this);
 	}
 
-    template<size_t ThreadCap, size_t (*Decider)(size_t)>
-    friend Matrix1 MatrixSumSameAccess(const Matrix1 &a, const Matrix1 &b)
-        // Handles the case when both matrices are stored in the same way
+private:
+    friend MatrixSumMachine<NumType> GetMSM<>(const Matrix1<NumType>& MatA, const Matrix1<NumType>& MatB, Matrix1<NumType>& MatC);
+public:
+    template<bool HorizontalReturn = false, size_t ThreadCap = 8, size_t (*Decider)(size_t) = LogarithmicThreads<ThreadCap>>
+	friend Matrix1 operator+(const Matrix1& A, const Matrix1& B)
     {
-        Matrix1 RetVal(a.Rows, a.Cols, a.IsHorizontal);
-
-        if (a.Size < ThreadInfo::ThreadedStartingThreshold) {
-            MatrixSumHelperAlignedArrays(RetVal.Array, a.Array, b.Array, a.Size);
-            return RetVal;
-        }
-
-        size_t ThreadAmount = Decider(a.Size);
-        ThreadPackage Threads = ResourceManager::GetThreads();
-        size_t i;
-        size_t ElementsPerThread = a.Size / (size_t)ThreadAmount;
-
-        for (i = 0; i < ThreadAmount - 1; ++i) {
-            size_t offset = i * ElementsPerThread;
-            Threads.Array[i] = new std::thread(MatrixSumHelperAlignedArrays<NumType>,
-                                               RetVal.Array + offset, a.Array + offset, b.Array + offset, ElementsPerThread
-            );
-        }
-
-        size_t offset = i * ElementsPerThread;
-        Threads.Array[i] = new std::thread(MatrixSumHelperAlignedArrays<NumType>,
-                                           RetVal.Array + offset, a.Array + offset, b.Array + offset, a.Size - offset
-        );
-
-        for (i = 0; i < ThreadAmount; ++i) {
-            Threads.Array[i]->join();
-            delete Threads.Array[i];
-        }
-
-        Threads.Release();
-        return RetVal;
-    }
-
-#define InequalityThreshold 2
-// TODO: replace function pointers and create unversal threaded procedure
-    template<size_t ThreadCap, size_t (*Decider)(size_t)>
-    friend Matrix1 MatrixSumDiffAccess(const Matrix1 &a, const Matrix1 &b) {
-        Matrix1 RetVal(a.Rows, a.Cols, a.IsHorizontal);
-        void (*Func)(NumType*, const NumType*, const NumType*, unsigned, unsigned, unsigned, unsigned, unsigned, unsigned);
-        void (*FrameFunc)(NumType*, const NumType*, const NumType*, unsigned, unsigned, unsigned, unsigned, unsigned, unsigned);
-        size_t ElementsPerThread, DimToDivide, CoDim;
-
-        if (!a.IsHorizontal && b.IsHorizontal)
-            // Left matrix is col stored and right is row stored
-        {
-            if (a.Rows > InequalityThreshold * a.Cols)
-                // Choosing a preferable situation for block chunking
-            {
-                Func = &MatrixSumHelperNotAlignedArrays_CR_DivByRows<NumType>;
-                FrameFunc = &MatrixSumHelperNotAlignedArrays_CR_DivByRows_Frame<NumType>;
-                DimToDivide = a.Rows; CoDim = a.Cols;
-            }
-            else {
-                Func = &MatrixSumHelperNotAlignedArrays_CR_DivByCols<NumType>;
-                FrameFunc = &MatrixSumHelperNotAlignedArrays_CR_DivByCols_Frame<NumType>;
-                DimToDivide = a.Cols; CoDim = a.Rows;
-            }
-        }
-        else
-            // Opposite situation
-        {
-            if (a.Rows > InequalityThreshold * a.Cols) {
-                Func = &MatrixSumHelperNotAlignedArrays_RC_DivByRows<NumType>;
-                FrameFunc = &MatrixSumHelperNotAlignedArrays_RC_DivByRows_Frame<NumType>;
-                DimToDivide = a.Rows; CoDim = a.Cols;
-            }
-            else {
-                Func = &MatrixSumHelperNotAlignedArrays_RC_DivByCols<NumType>;
-                FrameFunc = &MatrixSumHelperNotAlignedArrays_RC_DivByCols_Frame<NumType>;
-                DimToDivide = a.Cols; CoDim = a.Rows;
-            }
-
-        }
-
-        if (a.Size < ThreadInfo::ThreadedStartingThreshold){
-            ElementsPerThread = (DimToDivide / CacheInfo::LineSize) * CacheInfo::LineSize;
-
-            Func(RetVal.Array, a.Array, b.Array, 0, ElementsPerThread, CoDim,
-                 RetVal.SizeOfLine, a.SizeOfLine, b.SizeOfLine);
-            FrameFunc(RetVal.Array, a.Array, b.Array, ElementsPerThread, DimToDivide, CoDim,
-                      RetVal.SizeOfLine, a.SizeOfLine, b.SizeOfLine);
-
-            return RetVal;
-        }
-
-        size_t ThreadAmount = Decider(a.Size);
-        ThreadPackage& Threads = ResourceManager::GetThreads();
-        size_t i;
-        ElementsPerThread = (DimToDivide / ThreadAmount);
-
-        for (i = 0; i < ThreadAmount; ++i) {
-            size_t Start = i * ElementsPerThread;
-            size_t Stop = (i + 1) * ElementsPerThread;
-
-            Threads.Array[i] = new std::thread(Func, RetVal.Array, a.Array, b.Array,
-                                               Start, Stop, CoDim, RetVal.SizeOfLine, a.SizeOfLine, b.SizeOfLine
-            );
-        }
-
-        for (unsigned j = 0; j < ThreadAmount; ++j) {
-            Threads.Array[j]->join();
-            delete Threads.Array[j];
-        }
-
-        size_t Start = i * ElementsPerThread;
-        FrameFunc(RetVal.Array, a.Array, b.Array, Start, DimToDivide, CoDim,
-                  RetVal.SizeOfLine, a.SizeOfLine, b.SizeOfLine);
-
-        Threads.Release();
-        return RetVal;
-    }
-
-    template<size_t ThreadCap = 8, size_t (*Decider)(size_t) = LogarithmicThreads<ThreadCap>>
-	friend Matrix1 operator+(const Matrix1& a, const Matrix1& b)
-        // Threaded sum of matrices
-    {
-        if (a.Rows != b.Rows || a.Cols != b.Cols) [[unlikely]]
+        if (A.Rows != B.Rows || A.Cols != B.Cols) [[unlikely]]
             throw std::runtime_error("[ERROR] Not able to perform matrix sum, dimensions are not equal\n");
+        Matrix1<NumType> RetVal{A.Rows, A.Cols};
 
-        if (a.IsHorizontal == b.IsHorizontal )
-            return MatrixSumSameAccess<ThreadCap, Decider>(a, b);
-        else
-            return MatrixSumDiffAccess<ThreadCap, Decider>(a, b);
+        auto Machine = GetMSM(A, B, RetVal);
+        Machine.template Perform<>();
+
+        return RetVal;
     }
 
 private:
-    template<typename NumT>
-    friend inline GPMM<NumT> GetMultMachine(const Matrix1<NumT>& A, const Matrix1<NumT>& B, const Matrix1<NumT>& C){
-        return GPMM<NumType>(A.Array, B.Array, C.Array, A.Rows, A.Cols, B.Cols, A.SizeOfLine, B.SizeOfLine, C.SizeOfLine,
-                             A.IsHorizontal, B.IsHorizontal, C.IsHorizontal);
-    }
-
+    // TODO: MOVE OUT
+    friend GPMM<NumType> GetMultMachine<>(const Matrix1<NumType> &A, const Matrix1<NumType> &B, const Matrix1<NumType> &C);
 public:
     template<size_t ThreadCap = 20, size_t (*Decider)(size_t) = LogarithmicThreads<ThreadCap>>
 	friend Matrix1 operator*(const Matrix1& A, const Matrix1& B){
@@ -361,15 +253,46 @@ public:
     }
 
 private:
-    friend OPM<NumType> GetOPM<>(const Vector<NumType>& A, const Vector<NumType>& B, Matrix1<NumType>& C, bool IsHor);
+    friend OPM<NumType> GetOPM<>(const Vector<NumType>& A, const Vector<NumType>& B, Matrix1<NumType>& C);
 
 public:
     template<typename NumT, size_t ThreadCap, size_t (*Decider)(size_t)>
     friend Matrix1<NumT> GetOuterProduct(const Vector<NumT>& A, const Vector<NumT>& B, bool HorizontalReturn);
 };
 
+// ------------------------------------
+// Wrappers for different machines
+// ------------------------------------
+
+template<typename NumT>
+inline MatrixSumMachine<NumT> GetMSM(const Matrix1<NumT>& MatA, const Matrix1<NumT>& MatB, Matrix1<NumT>& MatC){
+    return MatrixSumMachine<NumT>(MatA.Array, MatB.Array, MatC.Array, MatA.Rows, MatA.Cols, MatA.Size, MatA.SizeOfLine,
+                                  MatB.SizeOfLine, MatC.SizeOfLine, MatA.IsHorizontal, MatB.IsHorizontal, MatC.IsHorizontal);
+}
+
+template<typename NumT>
+inline OPM<NumT> GetOPM(const Vector<NumT>& A, const Vector<NumT>& B, Matrix1<NumT>& C)
+{
+    return OPM<NumT>(A.Array, B.Array, C.Array, A.GetSize(), B.GetSize(), C.SizeOfLine, C.GetIsHorizontal());
+}
+
+template<typename NumT>
+VMM<NumT> GetVMM(const Matrix1<NumT> &Mat, const Vector<NumT> &Vect, Vector<NumT> &RetVect) {
+    return VMM<NumT>(Mat.Array, Vect.GetArray(), RetVect.GetArray(), Mat.Rows, Mat.Cols, Mat.SizeOfLine, Mat.IsHorizontal);
+}
+
+template<typename NumT>
+GPMM<NumT> GetMultMachine(const Matrix1<NumT> &A, const Matrix1<NumT> &B, const Matrix1<NumT> &C) {
+    return GPMM<NumT>(A.Array, B.Array, C.Array, A.Rows, A.Cols, B.Cols, A.SizeOfLine, B.SizeOfLine, C.SizeOfLine,
+                      A.IsHorizontal, B.IsHorizontal, C.IsHorizontal);
+}
+
+// ------------------------------------
+// Resource / Init Management
+// ------------------------------------
+
 template<typename NumType>
-void Matrix1<NumType>::OptimizeResourceManagement(NumType *InitVal)
+void Matrix1<NumType>::OptimizeResourceManagement()
 // TODO: remove initval - perf
 // Find optimal way to store the data, then prepares
 // Arrays to be used efficiently, needs variable Rows and Cols to operate
@@ -400,9 +323,25 @@ void Matrix1<NumType>::OptimizeResourceManagement(NumType *InitVal)
 #endif
 
     // Standard data storing with aligned every line of matrix
-    *((Vector<NumType>*)this) = InitVal == nullptr ?
-                                Vector<NumType>(ExpectedAlignedSize, IsHorizontal) :
-                                Vector<NumType>(ExpectedAlignedSize, *InitVal, IsHorizontal);
+    *((Vector<NumType>*)this) = Vector<NumType>(ExpectedAlignedSize, IsHorizontal);
+}
+
+template<typename NumType>
+void Matrix1<NumType>::SetupAccess()
+// Copies corresponding dimensions to variables data alignment variables
+{
+    if (IsHorizontal) {
+        ElementsPerLine = Cols;
+        Lines = Rows;
+        AccessFunc = &Matrix1::AccessByRow;
+        AccessFuncConst = &Matrix1::AccessByRowConst;
+    }
+    else {
+        ElementsPerLine = Rows;
+        Lines = Cols;
+        AccessFunc = &Matrix1::AccessByCol;
+        AccessFuncConst = &Matrix1::AccessByColConst;
+    }
 }
 
 template<typename NumType>
@@ -413,23 +352,16 @@ Matrix1<NumType>::Matrix1(size_t Rows, size_t Cols, const NumType *Init, bool By
     PerformSanityChecks();
     SetupAccess();
     OptimizeResourceManagement();
-    MoveFromPointer(Init);
+    MoveFromPointer(Init, 0);
 }
 
 template<typename NumType>
 Matrix1<NumType>::Matrix1(size_t NNSize, const NumType *Init, bool ByRow, ResourceManager *MM) :
-        Vector<NumType>{ ByRow, MM }, Rows{ NNSize }, Cols{ NNSize },
-        MatrixSize{ (unsigned long)Rows * (unsigned long)Cols }
-{
-    PerformSanityChecks();
-    SetupAccess();
-    OptimizeResourceManagement();
-    MoveFromPointer(Init);
-}
+    Matrix1(NNSize, NNSize, Init, ByRow, MM) {}
 
 template<typename NumType>
 Matrix1<NumType>::Matrix1(std::initializer_list<std::initializer_list<NumType>> Init, bool ByRow,
-                          ResourceManager *MM) noexcept:
+                          ResourceManager *MM) :
         Vector<NumType>(ByRow, MM)
 {
     const std::initializer_list<NumType>* InitData = std::data(Init);
@@ -477,30 +409,18 @@ Matrix1<NumType>::Matrix1(const Matrix1 &Target) noexcept :
 }
 
 template<typename NumType>
-Matrix1<NumType>::Matrix1(size_t Rows, size_t Cols, NumType InitVal, bool ByRow,
-                          ResourceManager *MM) noexcept :
-        Vector<NumType>{ ByRow, MM }, Rows{ Rows }, Cols{ Cols },
-        MatrixSize { (unsigned long)Rows * (unsigned long)Cols }
-
+Matrix1<NumType>::Matrix1(size_t Rows, size_t Cols, NumType InitVal, bool ByRow, ResourceManager *MM)  :
+          Matrix1(Rows, Cols, ByRow, MM)
 {
-    PerformSanityChecks();
-    SetupAccess();
-    OptimizeResourceManagement(&InitVal);
+    SetWholeData(InitVal);
 }
 
 template<typename NumType>
-Matrix1<NumType>::Matrix1(size_t NNSize, NumType InitVal, bool ByRow, ResourceManager *MM) noexcept :
-        Vector<NumType>{ ByRow, MM }, Rows{ NNSize }, Cols{ NNSize },
-        MatrixSize { (unsigned long)NNSize * (unsigned long)NNSize }
-
-{
-    PerformSanityChecks();
-    SetupAccess();
-    OptimizeResourceManagement(&InitVal);
-}
+Matrix1<NumType>::Matrix1(size_t NNSize, NumType InitVal, bool ByRow, ResourceManager *MM):
+    Matrix1(NNSize, NNSize, InitVal, ByRow, MM) {}
 
 template<typename NumType>
-Matrix1<NumType>::Matrix1(size_t Rows, size_t Cols, bool ByRow, ResourceManager *MM) noexcept :
+Matrix1<NumType>::Matrix1(size_t Rows, size_t Cols, bool ByRow, ResourceManager *MM)  :
         Vector<NumType>{ ByRow, MM }, Rows{ Rows }, Cols{ Cols },
         MatrixSize { (unsigned long)Rows * (unsigned long)Cols }
 
@@ -511,79 +431,21 @@ Matrix1<NumType>::Matrix1(size_t Rows, size_t Cols, bool ByRow, ResourceManager 
 }
 
 template<typename NumType>
-Matrix1<NumType>::Matrix1(size_t NNSize, bool ByRow, ResourceManager *MM) noexcept :
-        Vector<NumType>{ ByRow, MM }, Rows{ NNSize }, Cols{ NNSize },
-        MatrixSize{ (unsigned long) NNSize * (unsigned long) NNSize}
-
-{
-    PerformSanityChecks();
-    SetupAccess();
-    OptimizeResourceManagement();
-}
+Matrix1<NumType>::Matrix1(size_t NNSize, bool ByRow, ResourceManager *MM)  :
+    Matrix1(NNSize, NNSize, ByRow, MM){}
 
 template<typename NumType>
-void Matrix1<NumType>::MoveFromPointer(NumType *Src)
-    // TODO: make different function for aligned and unaligned pointers
+void Matrix1<NumType>::MoveFromPointer(NumType * const Src, size_t SrcSoL)
+    // Data from source has to be laid out in the same way as dst matrix is (by cols or by rows)
+    // SrcSoL = 0 means there is no alignment done on it and function assumes its equal to matrix elements per line
 {
+    if (!SrcSoL) SrcSoL = ElementsPerLine;
+
     for (unsigned i = 0; i < Lines; ++i) {
         for (unsigned j = 0; j < ElementsPerLine; ++j)
-            Array[i * SizeOfLine + j] = Src[i * ElementsPerLine + j];
+            Array[i * SizeOfLine + j] = Src[i * SrcSoL + j];
     }
 }
-
-template<typename NumType>
-void Matrix1<NumType>::SetupAccess()
-// Copies corresponding dimensions to variables data alignment variables
-{
-    if (IsHorizontal) {
-        ElementsPerLine = Cols;
-        Lines = Rows;
-        AccessFunc = &Matrix1::AccessByRow;
-        AccessFuncConst = &Matrix1::AccessByRowConst;
-    }
-    else {
-        ElementsPerLine = Rows;
-        Lines = Cols;
-        AccessFunc = &Matrix1::AccessByCol;
-        AccessFuncConst = &Matrix1::AccessByColConst;
-    }
-}
-
-
-#ifdef DEBUG_
-
-template<typename NumType>
-bool Matrix1<NumType>::CheckForIntegrity(NumType *Val, bool verbose) const
-// Passed data must be identically aligned to Array member data
-{
-    for (size_t i = 0; i < Lines; ++i)
-        for (size_t j = 0; j < ElementsPerLine; ++j)
-            if (Array[i * SizeOfLine + j] != Val[i * ElementsPerLine + j])[[unlikely]] {
-                if (verbose)std::cerr << "[ERROR] Integrity test failed on Line: "
-                                      << i << " and offset: " << j << std::endl;
-
-                return false;
-            }
-
-    if (verbose) std::cout << "Success!!!\n";
-    return true;
-}
-
-template<typename NumType>
-bool Matrix1<NumType>::CheckForIntegrity(NumType Val, bool verbose) const {
-    for (size_t i = 0; i < Lines; ++i)
-        for (size_t j = 0; j < ElementsPerLine; ++j)
-            if (Array[i * SizeOfLine + j] != Val) [[unlikely]] {
-                if (verbose)std::cerr << "[ERROR] Integrity test failed on Line: "
-                                      << i << " and offset: " << j << std::endl;
-                return false;
-            }
-
-    if (verbose) std::cout << "Success!!!\n";
-    return true;
-}
-
-#endif // DEBUG_
 
 template<typename NumType>
 Matrix1<NumType> &Matrix1<NumType>::operator=(const Matrix1 &x) {
@@ -621,6 +483,49 @@ Matrix1<NumType> &Matrix1<NumType>::operator=(Matrix1 &&x) noexcept {
 
     return *this;
 }
+
+// ------------------------------------
+// Debug Options
+// ------------------------------------
+
+#ifdef DEBUG_
+
+template<typename NumType>
+bool Matrix1<NumType>::CheckForIntegrity(NumType *Val, bool verbose) const
+    // !!!Passed data must be identically aligned to Array member data
+{
+    for (size_t i = 0; i < Lines; ++i)
+        for (size_t j = 0; j < ElementsPerLine; ++j)
+            if (Array[i * SizeOfLine + j] != Val[i * ElementsPerLine + j])[[unlikely]] {
+                if (verbose)std::cerr << "[ERROR] Integrity test failed on Line: "
+                                      << i << " and offset: " << j << std::endl;
+
+                return false;
+            }
+
+    if (verbose) std::cout << "Success!!!\n";
+    return true;
+}
+
+template<typename NumType>
+bool Matrix1<NumType>::CheckForIntegrity(NumType Val, bool verbose) const {
+    for (size_t i = 0; i < Lines; ++i)
+        for (size_t j = 0; j < ElementsPerLine; ++j)
+            if (Array[i * SizeOfLine + j] != Val) [[unlikely]] {
+                if (verbose)std::cerr << "[ERROR] Integrity test failed on Line: "
+                                      << i << " and offset: " << j << std::endl;
+                return false;
+            }
+
+    if (verbose) std::cout << "Success!!!\n";
+    return true;
+}
+
+#endif // DEBUG_
+
+// ------------------------------------
+// Operations on object
+// ------------------------------------
 
 template<typename NumType>
 void Matrix1<NumType>::PrintWhole(std::ostream &out) {
@@ -678,13 +583,6 @@ Matrix1<NumType> Matrix1<NumType>::GetTransposed() const
     return RetVal;
 }
 
-template<typename NumT>
-inline OPM<NumT> GetOPM(const Vector<NumT>& A, const Vector<NumT>& B, Matrix1<NumT>& C, bool IsHor)
-    // Wrapper for OuterProductMachine
-{
-    return OPM<NumT>(A.GetArray(), B.GetArray(), C.Array, A.GetSize(), B.GetSize(), C.SizeOfLine, IsHor);
-}
-
 template<typename NumT, size_t ThreadCap, size_t (*Decider)(size_t)>
 Matrix1<NumT> GetOuterProduct(const Vector<NumT>& A, const Vector<NumT>& B, bool HorizontalReturn){
     if (A.GetIsHorizontal() || !B.GetIsHorizontal()){
@@ -692,15 +590,10 @@ Matrix1<NumT> GetOuterProduct(const Vector<NumT>& A, const Vector<NumT>& B, bool
     }
 
     Matrix1<NumT> RetVal(A.GetSize(), B.GetSize(), HorizontalReturn);
-    auto Machine = GetOPM(A, B, RetVal, HorizontalReturn);
+    auto Machine = GetOPM(A, B, RetVal);
 
     Machine.Perform();
     return RetVal;
-}
-
-template<typename NumT>
-VMM<NumT> GetVMM(const Matrix1<NumT> &Mat, const Vector<NumT> &Vect, Vector<NumT> &RetVect) {
-    return VMM<NumT>(Mat.GetArray(), Vect.GetArray(), RetVect.GetArray(), Mat.Rows, Mat.Cols, Mat.SizeOfLine, Mat.IsHorizontal);
 }
 
 #endif

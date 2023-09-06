@@ -104,4 +104,10 @@ int FindConsoleWidth();
 //    return 8;
 //}
 
+template<typename NumType>
+inline constexpr size_t GetCacheLineElem()
+{
+    return CacheInfo::LineSize / sizeof(NumType);
+}
+
 #endif // PARALLEL_NUMERIC_JLISOWSKYY_H

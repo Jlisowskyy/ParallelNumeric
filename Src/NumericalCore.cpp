@@ -15,37 +15,34 @@
 
 #ifdef __AVX__
 
+// TODO Make universal template
+
 template<>
-void MatrixSumHelperAlignedArrays(double *Target, const double *const Input1, const double *const Input2,
-                                  const size_t Elements) {
-    const auto VectInput1 = (const __m256d*)Input1;
-    const auto VectInput2 = (const __m256d*)Input2;
-    auto VectTarget = (__m256d*)Target;
-
-    const unsigned long VectSize = Elements / AVXInfo::f64Cap;
-    for (size_t i = 0; i < VectSize; ++i) {
-        VectTarget[i] = _mm256_add_pd(VectInput1[i], VectInput2[i]);
-    }
-
-    for (size_t i = VectSize * AVXInfo::f64Cap; i < Elements; ++i) {
-        Target[i] = Input1[i] + Input2[i];
+void MatrixSumMachine<double>::AlignedArrays(size_t Begin, size_t End){
+//#pragma omp parallel for
+    for (size_t i = Begin; i < End; i += GetCacheLineElem<double>()) {
+        _mm256_store_pd(MatC + i, _mm256_add_pd(
+                _mm256_load_pd(MatA + i),
+                _mm256_load_pd(MatB + i)
+        ));
+        _mm256_store_pd(MatC + i + AVXInfo::f64Cap, _mm256_add_pd(
+                _mm256_load_pd(MatA + i + AVXInfo::f64Cap),
+                _mm256_load_pd(MatB + i + AVXInfo::f64Cap)
+        ));
     }
 }
 
 template<>
-void MatrixSumHelperAlignedArrays(float *Target, const float *const Input1, const float *const Input2,
-                                  const size_t Elements) {
-    const auto VectInput1 = (const __m256*)Input1;
-    const auto VectInput2 = (const __m256*)Input2;
-    auto VectTarget = (__m256*)Target;
-
-    const size_t VectSize = Elements / AVXInfo::f32Cap;
-    for (size_t i = 0; i < VectSize; ++i) {
-        VectTarget[i] = _mm256_add_ps(VectInput1[i], VectInput2[i]);
-    }
-
-    for (size_t i = VectSize * AVXInfo::f32Cap; i < Elements; ++i) {
-        Target[i] = Input1[i] + Input2[i];
+void MatrixSumMachine<float>::AlignedArrays(size_t Begin, size_t End) {
+    for (size_t i = Begin; i < End; i += AVXInfo::f32Cap) {
+        _mm256_store_ps(MatC + i, _mm256_add_ps(
+                _mm256_load_ps(MatA + i),
+                _mm256_load_ps(MatB + i)
+        ));
+        _mm256_store_ps(MatC + i + AVXInfo::f32Cap, _mm256_add_ps(
+                _mm256_load_ps(MatA + i + AVXInfo::f32Cap),
+                _mm256_load_ps(MatB + i + AVXInfo::f32Cap)
+        ));
     }
 }
 
