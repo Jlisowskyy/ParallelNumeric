@@ -110,4 +110,8 @@ inline constexpr size_t GetCacheLineElem()
     return CacheInfo::LineSize / sizeof(NumType);
 }
 
+#ifdef DEBUG_
+#include "../Maintenance/Debuggers.hpp"
+#endif
+
 #endif // PARALLEL_NUMERIC_JLISOWSKYY_H

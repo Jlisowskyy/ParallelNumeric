@@ -25,6 +25,10 @@ inline float HorSum(__m256& Obj){
     return GetSubEl(Obj, 0) + GetSubEl(Obj, 1) + GetSubEl(Obj, 2) + GetSubEl(Obj, 3) +
             GetSubEl(Obj, 4) + GetSubEl(Obj, 5) + GetSubEl(Obj,6 ) +GetSubEl(Obj, 7);
 }
+
+inline __m256d OmitCacheLoad(const double* Obj){
+    return reinterpret_cast<__m256d>(_mm256_stream_load_si256(reinterpret_cast<const __m256i*>(Obj)));
+}
 #endif
 
 #endif //PARALLELNUM_AVXSOLUTIONS_HPP

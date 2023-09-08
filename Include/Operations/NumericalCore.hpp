@@ -120,25 +120,6 @@ public:
     inline NumType Perform();
 };
 
-template<typename NumType>
-template<size_t ThreadCap, size_t (*Decider)(size_t)>
-NumType DotProductMachine<NumType>::Perform() {
-    if (Size < ThreadInfo::ThreadedStartingThreshold) {
-        return DotProduct();
-    }
-    else {
-        NumType ThreadResult[ThreadCap]{ NumType{} };
-        const size_t ThreadAmount = Decider(Size * 2);
-        ElementsPerThread = (Size / (ThreadAmount * GetKernelSize())) * GetKernelSize();
-
-        ExecuteThreadsWOutput(ThreadResult, ThreadAmount, &DotProductMachine<NumType>::ThreadInstance, this);
-
-        NumType RetVal{};
-        for(auto& Iter : ThreadResult) RetVal += Iter;
-        return RetVal + DotProductCleaning(ElementsPerThread * ThreadAmount);
-    }
-}
-
 #ifdef __AVX__
 
 template<>
@@ -155,24 +136,45 @@ double DotProductMachine<double>::DotProductAligned(size_t Begin, size_t End);
 // Outer Product
 // ------------------------------------------
 
-template<typename NumType>
-class OPM
-    // Outer Product Machine
-    // TODO Optimize for L3 - long vectors
-{
-    static constexpr size_t ElementsPerCacheLine = CacheInfo::LineSize / sizeof(NumType);
+// TODO: Explain names
 
+template<typename NumType>
+class OuterProductMachine
+{
     const NumType* CoefPtr;
     const NumType* VectPtr;
     NumType* const MatC;
     size_t CoefSize;
     size_t VectSize;
     const size_t MatCSoL;
+
+    inline void ProcessCoefBlock(size_t BlockBegin, size_t BlockEnd, size_t VectRange);
+    inline void CleanEdges(size_t CleanBegin, size_t CleanOutElementsBegin);
+
+    std::mutex EdgeGuard;
+    bool EdgesDone { false };
+    size_t ElementsPerThread{};
+    size_t VectRangeForThread{};
+    size_t CleanBeginForThread{};
+    void ThreadInstance(size_t ThreadID);
+
 public:
-    OPM(const NumType* VectA, const NumType* VectB, NumType* MatC, size_t ASize,
-        size_t BSize, size_t MatCSoL, bool IsHor = false);
+    OuterProductMachine(const NumType* VectA, const NumType* VectB, NumType* MatC, size_t ASize,
+                        size_t BSize, size_t MatCSoL, bool IsHor = false);
+
+    template<size_t ThreadCap = 20, size_t (*Decider)(size_t) = LogarithmicThreads<ThreadCap>>
     inline void Perform();
 };
+
+#ifdef __AVX__
+
+template<>
+void OuterProductMachine<double>::ProcessCoefBlock(size_t BlockBegin, size_t BlockEnd, size_t VectRange);
+
+template<>
+void OuterProductMachine<double>::CleanEdges(size_t CleanBegin, size_t CleanOutElementsBegin);
+
+#endif
 
 // ------------------------------------------
 // Vector X Matrix Multiplication
@@ -188,12 +190,21 @@ class VMM{
     const size_t MatACols;
     const size_t MatASoL;
     const bool IsMatHor;
-    void RMVKernel12x4(size_t HorizontalCord, size_t VerticalCord) {};
-    void CMVKernel12x4(size_t HorizontalCord, size_t VerticalCord) {};
+    inline void RMVKernel8x4(size_t HorizontalCord, size_t VerticalCord) {};
+    inline void CMVKernel12x4(size_t HorizontalCord, size_t VerticalCord) {};
     inline void PerformCVM();
     inline void PerformRVM() {};
     inline void PerformCMV();
     inline void PerformRMV();
+
+    static constexpr size_t GetVectChunkSize(){
+        return (CacheInfo::L1Size / 2) / sizeof(NumType);
+    }
+
+    static constexpr size_t GetVertMatChunkSize(){
+        return (CacheInfo::L1Size / 2) / sizeof(NumType);
+    }
+
 public:
     VMM(const NumType* MatA, const NumType* VectB, NumType* VectC, size_t MatARows, size_t MatACols, size_t MatASoL, bool IsHor);
     void PerformVM(){
@@ -209,13 +220,22 @@ public:
 #if defined(__AVX__) && defined(__FMA__)
 
 template<>
-void VMM<double>::PerformCMV();
+constexpr size_t VMM<double>::GetVectChunkSize()
+    // 3072
+{
+    return 3072;
+}
 
 template<>
-void VMM<double>::PerformRMV();
+constexpr size_t VMM<double>::GetVertMatChunkSize()
+    // 1024
+{
+//    return 1024;
+    return 1048552;
+}
 
 template<>
-void VMM<double>::RMVKernel12x4(size_t HorizontalCord, size_t VerticalCord);
+void VMM<double>::RMVKernel8x4(size_t HorizontalCord, size_t VerticalCord);
 
 template<>
 void VMM<double>::CMVKernel12x4(size_t HorizontalCord, size_t VerticalCord);
@@ -554,13 +574,32 @@ void DotProductMachine<NumType>::ThreadInstance(size_t ThreadID, NumType* Return
     *ReturnVal = DotProductAligned(Begin, End);
 }
 
+template<typename NumType>
+template<size_t ThreadCap, size_t (*Decider)(size_t)>
+NumType DotProductMachine<NumType>::Perform() {
+    if (Size < ThreadInfo::ThreadedStartingThreshold) {
+        return DotProduct();
+    }
+    else {
+        NumType ThreadResult[ThreadCap]{ NumType{} };
+        const size_t ThreadAmount = Decider(Size * 2);
+        ElementsPerThread = (Size / (ThreadAmount * GetKernelSize())) * GetKernelSize();
+
+        ExecuteThreadsWOutput(ThreadResult, ThreadAmount, &DotProductMachine<NumType>::ThreadInstance, this);
+
+        NumType RetVal{};
+        for(auto& Iter : ThreadResult) RetVal += Iter;
+        return RetVal + DotProductCleaning(ElementsPerThread * ThreadAmount);
+    }
+}
+
 // ------------------------------------------
 // Outer Product Implementation
 // ------------------------------------------
 
 template<typename NumType>
-OPM<NumType>::OPM(const NumType *VectA, const NumType *VectB, NumType *MatC, size_t ASize, size_t BSize,
-                  size_t MatCSoL, bool IsHor):
+OuterProductMachine<NumType>::OuterProductMachine(const NumType *VectA, const NumType *VectB, NumType *MatC, size_t ASize, size_t BSize,
+                                                  size_t MatCSoL, bool IsHor):
     MatC{ MatC }, MatCSoL{ MatCSoL }
 {
     if (IsHor){
@@ -577,112 +616,77 @@ OPM<NumType>::OPM(const NumType *VectA, const NumType *VectB, NumType *MatC, siz
     }
 }
 
+template<typename NumType>
+void OuterProductMachine<NumType>::CleanEdges(size_t CleanBegin, size_t CleanOutElements)
+    // CleanOutElements - used in case of double cache line alignment. Used in AVX versions
+{
+    for(size_t  j = 0; j < VectSize; ++j) {
+        for (size_t i = CleanBegin; i < CoefSize; ++i) {
+            MatC[i * MatCSoL + j] = VectPtr[j] * CoefPtr[i];
+        }
+    }
+}
 
 template<typename NumType>
-void OPM<NumType>::Perform() {
-    const size_t Range = (CoefSize / ElementsPerCacheLine) * ElementsPerCacheLine;
-    for (size_t i = 0; i < Range; i += ElementsPerCacheLine) {
-        for (size_t j = 0; j < VectSize; ++j) {
-            MatC[i * MatCSoL + j] = VectPtr[j] * CoefPtr[i];
-            MatC[(i + 1) * MatCSoL + j] = VectPtr[j] * CoefPtr[i + 1];
-            MatC[(i + 2) * MatCSoL + j] = VectPtr[j] * CoefPtr[i + 2];
-            MatC[(i + 3) * MatCSoL + j] = VectPtr[j] * CoefPtr[i + 3];
-            MatC[(i + 4) * MatCSoL + j] = VectPtr[j] * CoefPtr[i + 4];
-            MatC[(i + 5) * MatCSoL + j] = VectPtr[j] * CoefPtr[i + 5];
-            MatC[(i + 6) * MatCSoL + j] = VectPtr[j] * CoefPtr[i + 6];
-            MatC[(i + 7) * MatCSoL + j] = VectPtr[j] * CoefPtr[i + 7];
-        }
-    }
-
-    for(size_t  j = 0; j < VectSize; ++j) {
-        for (size_t i = Range; i < CoefSize; ++i) {
-            MatC[i * MatCSoL + j] = VectPtr[j] * CoefPtr[i];
-        }
-    }
-}
-
-#ifdef __AVX__
-template<>
-inline void OPM<double>::Perform()
-#define LoadAvx(double_ptr) *(__m256d*)double_ptr
+void OuterProductMachine<NumType>::ProcessCoefBlock(size_t BlockBegin, size_t BlockEnd, size_t VectRange)
+    // Coef range (BlockEnd - BlockBegin) must be divisible by ElementsInCacheLine
+    // VectRange - Range blockable by size of cache line
 {
-    const size_t CoefRange = (CoefSize / ElementsPerCacheLine) * ElementsPerCacheLine;
-    const double *CoefPtrIter = CoefPtr;
-
-#pragma omp parallel for
-    for (size_t i = 0; i < CoefRange; i += ElementsPerCacheLine) {
-        __m256d CoefBuff0 = _mm256_set1_pd(*(CoefPtrIter));
-        __m256d CoefBuff1 = _mm256_set1_pd(*(CoefPtrIter + 1));
-        __m256d CoefBuff2 = _mm256_set1_pd(*(CoefPtrIter + 2));
-        __m256d CoefBuff3 = _mm256_set1_pd(*(CoefPtrIter + 3));
-        __m256d CoefBuff4 = _mm256_set1_pd(*(CoefPtrIter + 4));
-        __m256d CoefBuff5 = _mm256_set1_pd(*(CoefPtrIter + 5));
-        __m256d CoefBuff6 = _mm256_set1_pd(*(CoefPtrIter + 6));
-        __m256d CoefBuff7 = _mm256_set1_pd(*(CoefPtrIter + 7));
-        CoefPtrIter += ElementsPerCacheLine;
-
-        const double *VectPtrIter = VectPtr;
-        for (size_t j = 0; j < VectSize; j += ElementsPerCacheLine) {
-            __m256d VectA0 = _mm256_load_pd(VectPtrIter);
-            __m256d VectA1 = _mm256_load_pd(VectPtrIter + AVXInfo::f64Cap);
-            VectPtrIter += ElementsPerCacheLine;
-
-            double *TargetFirstPtr0 = MatC + i * MatCSoL + j;
-            double *TargetSecondPtr0 = MatC + i * MatCSoL + j + AVXInfo::f64Cap;
-            double *TargetFirstPtr1 = MatC + (i + 2) * MatCSoL + j;
-            double *TargetSecondPtr1 = MatC + (i + 2) * MatCSoL + j + AVXInfo::f64Cap;
-            double *TargetFirstPtr2 = MatC + (i + 4) * MatCSoL + j;
-            double *TargetSecondPtr2 = MatC + (i + 4) * MatCSoL + j + AVXInfo::f64Cap;
-            double *TargetFirstPtr3 = MatC + (i + 6) * MatCSoL + j;
-            double *TargetSecondPtr3 = MatC + (i + 6) * MatCSoL + j + AVXInfo::f64Cap;
-            LoadAvx(TargetFirstPtr0) = _mm256_mul_pd(VectA0, CoefBuff0);
-            LoadAvx(TargetSecondPtr0) = _mm256_mul_pd(VectA1, CoefBuff0);
-            LoadAvx(TargetFirstPtr1) = _mm256_mul_pd(VectA0, CoefBuff2);
-            LoadAvx(TargetSecondPtr1) = _mm256_mul_pd(VectA1, CoefBuff2);
-            LoadAvx(TargetFirstPtr2) = _mm256_mul_pd(VectA0, CoefBuff4);
-            LoadAvx(TargetSecondPtr2) = _mm256_mul_pd(VectA1, CoefBuff4);
-            LoadAvx(TargetFirstPtr3) = _mm256_mul_pd(VectA0, CoefBuff6);
-            LoadAvx(TargetSecondPtr3) = _mm256_mul_pd(VectA1, CoefBuff6);
-            TargetSecondPtr0 += MatCSoL;
-            TargetFirstPtr0 += MatCSoL;
-            TargetFirstPtr1 += MatCSoL;
-            TargetSecondPtr1 += MatCSoL;
-            TargetFirstPtr2 += MatCSoL;
-            TargetSecondPtr2 += MatCSoL;
-            TargetFirstPtr3 += MatCSoL;
-            TargetSecondPtr3 += MatCSoL;
-            LoadAvx(TargetFirstPtr0) = _mm256_mul_pd(VectA0, CoefBuff1);
-            LoadAvx(TargetSecondPtr0) = _mm256_mul_pd(VectA1, CoefBuff1);
-            LoadAvx(TargetFirstPtr1) = _mm256_mul_pd(VectA0, CoefBuff3);
-            LoadAvx(TargetSecondPtr1) = _mm256_mul_pd(VectA1, CoefBuff3);
-            LoadAvx(TargetFirstPtr2) = _mm256_mul_pd(VectA0, CoefBuff5);
-            LoadAvx(TargetSecondPtr2) = _mm256_mul_pd(VectA1, CoefBuff5);
-            LoadAvx(TargetFirstPtr3) = _mm256_mul_pd(VectA0, CoefBuff7);
-            LoadAvx(TargetSecondPtr3) = _mm256_mul_pd(VectA1, CoefBuff7);
+    for (size_t i = BlockBegin; i < BlockEnd; i += GetCacheLineElem<NumType>()) {
+        NumType CoefHolders[GetCacheLineElem<NumType>()];
+        // Should be unrolled
+        for (size_t k = 0; k < GetCacheLineElem<NumType>(); ++k){
+            CoefHolders[k] = CoefPtr[i + k];
         }
-    }
 
-    const size_t CleaningRange = CoefSize - CoefRange;
-    __m256d Buffers[ElementsPerCacheLine];
-    for (size_t i = 0; i < CleaningRange; i++) {
-        Buffers[i] = _mm256_set1_pd(CoefPtr[CoefRange + i]);
-    }
-
-    for (size_t j = 0; j < VectSize; j += ElementsPerCacheLine) {
-        __m256d VectFirst = _mm256_load_pd(VectPtr + j);
-        __m256d VectSecond = _mm256_load_pd(VectPtr + j + AVXInfo::f64Cap);
-
-        for (size_t i = 0; i < CleaningRange; i++)
-#define CleaningTargetUpper MatC + (i + CoefRange) * MatCSoL + j
-#define CleaningTargetLower MatC + (i + CoefRange) * MatCSoL + j + AVXInfo::f64Cap
-        {
-            _mm256_store_pd(CleaningTargetUpper, _mm256_mul_pd(VectFirst, Buffers[i]));
-            _mm256_store_pd(CleaningTargetLower, _mm256_mul_pd(VectSecond, Buffers[i]));
+        for (size_t j = 0; j < VectSize; ++j) {
+            // Should be unrolled
+            for (size_t k = 0; k < GetCacheLineElem<NumType>(); ++k){
+                MatC[(i + k) * MatCSoL + j] = VectPtr[j] * CoefHolders[k];
+            }
         }
     }
 }
 
-#endif
+template<typename NumType>
+void OuterProductMachine<NumType>::ThreadInstance(size_t ThreadID) {
+    size_t BlockBegin { ThreadID * ElementsPerThread };
+    size_t BlockEnd { (ThreadID + 1) * ElementsPerThread };
+
+    ProcessCoefBlock(BlockBegin, BlockEnd,VectRangeForThread);
+
+    if (!EdgesDone && EdgeGuard.try_lock()){
+        const size_t BlockableRange { (CoefSize / GetCacheLineElem<NumType>() ) * GetCacheLineElem<double>() };
+        if (BlockableRange != CleanBeginForThread) ProcessCoefBlock(CleanBeginForThread, BlockableRange, VectRangeForThread);
+
+        CleanEdges(BlockableRange, VectRangeForThread);
+        EdgesDone = true;
+        EdgeGuard.unlock();
+    }
+}
+
+template<typename NumType>
+template<size_t ThreadCap, size_t (*Decider)(size_t)>
+void OuterProductMachine<NumType>::Perform() {
+    const size_t OperationCount { VectSize * CoefSize };
+
+    if (OperationCount < ThreadInfo::ThreadedStartingThreshold) {
+        const size_t CoefRange { (CoefSize / GetCacheLineElem<NumType>()) * GetCacheLineElem<NumType>() };
+        const size_t VectRange { (VectSize / GetCacheLineElem<NumType>()) * GetCacheLineElem<NumType>() };
+        ProcessCoefBlock(0, CoefRange, VectRange);
+
+        if (CoefRange == CoefSize) return;
+        CleanEdges(CoefRange, VectRange);
+    }
+    else{
+        const size_t ThreadCount { Decider(OperationCount) };
+        ElementsPerThread = ((CoefSize / GetCacheLineElem<NumType>()) / ThreadCount ) * GetCacheLineElem<NumType>();
+        VectRangeForThread = (VectSize / GetCacheLineElem<NumType>()) * GetCacheLineElem<NumType>();
+        CleanBeginForThread = ThreadCount * ElementsPerThread;
+
+        ExecuteThreads(ThreadCount, &OuterProductMachine<NumType>::ThreadInstance, this);
+    }
+}
 
 // ------------------------------------------
 // Matrix and Vector Multiplication Implementation
@@ -735,23 +739,32 @@ void VMM<NumType>::PerformCMV() {
 }
 template<typename NumType>
 void VMM<NumType>::PerformRMV() {
-    for(size_t i = 0; i < MatARows; i+=4){
-        NumType acc0 = 0;
-        NumType acc1 = 0;
-        NumType acc2 = 0;
-        NumType acc3 = 0;
-        for(size_t j = 0; j < MatACols; ++j){
-            acc0 += MatA[i * MatASoL + j] * VectB[j];
-            acc1 += MatA[(i + 1) * MatASoL + j] * VectB[j];
-            acc2 += MatA[(i + 2) * MatASoL + j] * VectB[j];
-            acc3 += MatA[(i + 3) * MatASoL + j] * VectB[j];
+//    for(size_t i = 0; i < MatARows; i+=4){
+//        NumType acc0 = 0;
+//        NumType acc1 = 0;
+//        NumType acc2 = 0;
+//        NumType acc3 = 0;
+//        for(size_t j = 0; j < MatACols; ++j){
+//            acc0 += MatA[i * MatASoL + j] * VectB[j];
+//            acc1 += MatA[(i + 1) * MatASoL + j] * VectB[j];
+//            acc2 += MatA[(i + 2) * MatASoL + j] * VectB[j];
+//            acc3 += MatA[(i + 3) * MatASoL + j] * VectB[j];
+//        }
+//        VectC[i] = acc0;
+//        VectC[i + 1] = acc1;
+//        VectC[i + 2] = acc2;
+//        VectC[i + 3] = acc3;
+//    }
+    for (size_t i = 0; i < MatACols; i += GetVectChunkSize()){
+//#pragma omp parallel for
+        for(size_t j = 0; j < MatARows; j += GetVertMatChunkSize()){
+            const size_t Range = std::min(MatARows, j + GetVertMatChunkSize());
+#pragma omp parallel for
+            for(size_t jj = j; jj < Range; jj += GetCacheLineElem<NumType>()){
+                RMVKernel8x4(i , jj);
+            }
         }
-        VectC[i] = acc0;
-        VectC[i + 1] = acc1;
-        VectC[i + 2] = acc2;
-        VectC[i + 3] = acc3;
     }
-
     // Cleaning is not necessary, if there is no memory optimization, due to alignment
 }
 

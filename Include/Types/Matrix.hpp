@@ -24,7 +24,7 @@ template<typename NumType, size_t ThreadCap = 20, size_t (*Decider)(size_t) = Lo
 inline Matrix1<NumType> GetOuterProduct(const Vector<NumType>& A, const Vector<NumType>& B, bool HorizontalReturn = false);
 
 template<typename NumT>
-inline OPM<NumT> GetOPM(const Vector<NumT>& A, const Vector<NumT>& B, Matrix1<NumT>& C);
+inline OuterProductMachine<NumT> GetOPM(const Vector<NumT>& A, const Vector<NumT>& B, Matrix1<NumT>& C);
 
 template<typename NumT>
 inline VMM<NumT> GetVMM(const Matrix1<NumT>& Mat, const Vector<NumT>& Vect, Vector<NumT>& RetVect);
@@ -195,7 +195,6 @@ public:
     }
 
 private:
-    // TODO: MOVE OUT
     friend GPMM<NumType> GetMultMachine<>(const Matrix1<NumType> &A, const Matrix1<NumType> &B, const Matrix1<NumType> &C);
 public:
     template<size_t ThreadCap = 20, size_t (*Decider)(size_t) = LogarithmicThreads<ThreadCap>>
@@ -253,8 +252,7 @@ public:
     }
 
 private:
-    friend OPM<NumType> GetOPM<>(const Vector<NumType>& A, const Vector<NumType>& B, Matrix1<NumType>& C);
-
+    friend OuterProductMachine<NumType> GetOPM<>(const Vector<NumType>& A, const Vector<NumType>& B, Matrix1<NumType>& C);
 public:
     template<typename NumT, size_t ThreadCap, size_t (*Decider)(size_t)>
     friend Matrix1<NumT> GetOuterProduct(const Vector<NumT>& A, const Vector<NumT>& B, bool HorizontalReturn);
@@ -271,9 +269,9 @@ inline MatrixSumMachine<NumT> GetMSM(const Matrix1<NumT>& MatA, const Matrix1<Nu
 }
 
 template<typename NumT>
-inline OPM<NumT> GetOPM(const Vector<NumT>& A, const Vector<NumT>& B, Matrix1<NumT>& C)
+inline OuterProductMachine<NumT> GetOPM(const Vector<NumT>& A, const Vector<NumT>& B, Matrix1<NumT>& C)
 {
-    return OPM<NumT>(A.Array, B.Array, C.Array, A.GetSize(), B.GetSize(), C.SizeOfLine, C.GetIsHorizontal());
+    return OuterProductMachine<NumT>(A.GetArray(), B.GetArray(), C.Array, A.GetSize(), B.GetSize(), C.SizeOfLine, C.GetIsHorizontal());
 }
 
 template<typename NumT>
@@ -412,7 +410,7 @@ template<typename NumType>
 Matrix1<NumType>::Matrix1(size_t Rows, size_t Cols, NumType InitVal, bool ByRow, ResourceManager *MM)  :
           Matrix1(Rows, Cols, ByRow, MM)
 {
-    SetWholeData(InitVal);
+    Vector<NumType>::SetWholeData(InitVal);
 }
 
 template<typename NumType>
@@ -592,7 +590,7 @@ Matrix1<NumT> GetOuterProduct(const Vector<NumT>& A, const Vector<NumT>& B, bool
     Matrix1<NumT> RetVal(A.GetSize(), B.GetSize(), HorizontalReturn);
     auto Machine = GetOPM(A, B, RetVal);
 
-    Machine.Perform();
+    Machine.template Perform<ThreadCap, Decider>();
     return RetVal;
 }
 

@@ -143,7 +143,7 @@ void PerformVectOnDataTest(size_t VectorSize, unsigned RunsToGo){
 }
 
 template <bool Verbose = false, bool IsHor = false, typename NumType = DefaultNumType, D2Pack(*GetDims)(size_t) = Gen2Dims>
-void PerformOPTest(size_t OpCount, unsigned RunsToGo, long Seed = 0) {
+void PerformOutProdTest(size_t OpCount, unsigned RunsToGo, long Seed = 0) {
     using ArgT = Vector<NumType>;
     using ArgP = std::tuple<ArgT, ArgT>;
     using RetT = Matrix1<NumType>;
@@ -172,7 +172,7 @@ void PerformOPTest(size_t OpCount, unsigned RunsToGo, long Seed = 0) {
 
 template<bool Verbose = false, bool IsArgMatHor = false, bool IsRetMatHor = false,bool IsVectHor = false,
         typename NumType = DefaultNumType, D2Pack(*GetDims)(size_t) = Gen2Dims>
-void PerformVMMTest(size_t OperationCount, unsigned RunsToGo, long Seed = 0){
+void PerformVectMatMultTest(size_t OperationCount, unsigned RunsToGo, long Seed = 0){
     using MatT = Matrix1<NumType>;
     using VecT= Vector<NumType>;
     using ArgP = std::tuple<MatT, VecT>;
@@ -216,7 +216,7 @@ void PerformVMMTest(size_t OperationCount, unsigned RunsToGo, long Seed = 0){
                     CoDim = std::get<0>(Args).GetCols();
                 }
 
-                return Result.CheckForIntegrity(CoDim * std::get<0>(Args)[0], std::get<1>(Args)[0], Verb);
+                return Result.CheckForIntegrity(CoDim * std::get<0>(Args)[0] * std::get<1>(Args)[0], Verb);
             }, Verbose>
             (OperationCount, RunsToGo, Seed);
 }

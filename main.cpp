@@ -35,10 +35,11 @@ int main(){
 
 using typior = double;
 constexpr size_t length = (512 + 256) * 1024 * 1024;
-constexpr size_t size = 24000;
+constexpr size_t size = 40000;
 
 int main() {
-
+    PerformVectMatMultTest<true, true, false, false, DefaultNumType,
+        [](size_t) ->D2Pack { return std::make_tuple(size, size); }>(1e+6, 25);
 }
 
 #elif defined DebugMatrix1

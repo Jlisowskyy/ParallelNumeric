@@ -19,7 +19,6 @@
 
 template<>
 void MatrixSumMachine<double>::AlignedArrays(size_t Begin, size_t End){
-//#pragma omp parallel for
     for (size_t i = Begin; i < End; i += GetCacheLineElem<double>()) {
         _mm256_store_pd(MatC + i, _mm256_add_pd(
                 _mm256_load_pd(MatA + i),
@@ -113,15 +112,112 @@ double DotProductMachine<double>::DotProductAligned(size_t Begin, size_t End)
     return HorSum(AccRegs[0]);
 }
 
-// Czas 0.75 * 1024 * 1024 * 1024 wynosil przed 0.5, 10 prob
-// 0.373
-// ten sam przypadek 0.16 dla omp
-
 #endif // __AVX__
 
 // ------------------------------------------
 // Outer product AVX Implementation
 // ------------------------------------------
+
+#ifdef __AVX__
+
+template<>
+void OuterProductMachine<double>::ProcessCoefBlock(size_t BlockBegin, size_t BlockEnd, size_t VectRange){
+    const double *CoefPtrIter = CoefPtr;
+    for (size_t i = BlockBegin; i < BlockEnd; i += GetCacheLineElem<double>()) {
+        __m256d CoefBuff0 = _mm256_set1_pd(*(CoefPtrIter));
+        __m256d CoefBuff1 = _mm256_set1_pd(*(CoefPtrIter + 1));
+        __m256d CoefBuff2 = _mm256_set1_pd(*(CoefPtrIter + 2));
+        __m256d CoefBuff3 = _mm256_set1_pd(*(CoefPtrIter + 3));
+        __m256d CoefBuff4 = _mm256_set1_pd(*(CoefPtrIter + 4));
+        __m256d CoefBuff5 = _mm256_set1_pd(*(CoefPtrIter + 5));
+        __m256d CoefBuff6 = _mm256_set1_pd(*(CoefPtrIter + 6));
+        __m256d CoefBuff7 = _mm256_set1_pd(*(CoefPtrIter + 7));
+        CoefPtrIter += GetCacheLineElem<double>();
+
+        const double *VectPtrIter = VectPtr;
+        for (size_t j = 0; j < VectRange; j += GetCacheLineElem<double>()) {
+            __m256d VectA0 = _mm256_load_pd(VectPtrIter);
+            __m256d VectA1 = _mm256_load_pd(VectPtrIter + AVXInfo::f64Cap);
+            VectPtrIter += GetCacheLineElem<double>();
+
+            double *TargetFirstPtr0 = MatC + i * MatCSoL + j;
+            double *TargetSecondPtr0 = MatC + i * MatCSoL + j + AVXInfo::f64Cap;
+            double *TargetFirstPtr1 = MatC + (i + 2) * MatCSoL + j;
+            double *TargetSecondPtr1 = MatC + (i + 2) * MatCSoL + j + AVXInfo::f64Cap;
+            double *TargetFirstPtr2 = MatC + (i + 4) * MatCSoL + j;
+            double *TargetSecondPtr2 = MatC + (i + 4) * MatCSoL + j + AVXInfo::f64Cap;
+            double *TargetFirstPtr3 = MatC + (i + 6) * MatCSoL + j;
+            double *TargetSecondPtr3 = MatC + (i + 6) * MatCSoL + j + AVXInfo::f64Cap;
+
+            _mm256_stream_pd(TargetFirstPtr0, _mm256_mul_pd(VectA0, CoefBuff0));
+            _mm256_stream_pd(TargetSecondPtr0, _mm256_mul_pd(VectA1, CoefBuff0));
+            _mm256_stream_pd(TargetFirstPtr1, _mm256_mul_pd(VectA0, CoefBuff2));
+            _mm256_stream_pd(TargetSecondPtr1, _mm256_mul_pd(VectA1, CoefBuff2));
+            _mm256_stream_pd(TargetFirstPtr2, _mm256_mul_pd(VectA0, CoefBuff4));
+            _mm256_stream_pd(TargetSecondPtr2, _mm256_mul_pd(VectA1, CoefBuff4));
+            _mm256_stream_pd(TargetFirstPtr3, _mm256_mul_pd(VectA0, CoefBuff6));
+            _mm256_stream_pd(TargetSecondPtr3, _mm256_mul_pd(VectA1, CoefBuff6));
+
+            TargetSecondPtr0 += MatCSoL;
+            TargetFirstPtr0 += MatCSoL;
+            TargetFirstPtr1 += MatCSoL;
+            TargetSecondPtr1 += MatCSoL;
+            TargetFirstPtr2 += MatCSoL;
+            TargetSecondPtr2 += MatCSoL;
+            TargetFirstPtr3 += MatCSoL;
+            TargetSecondPtr3 += MatCSoL;
+
+            _mm256_stream_pd(TargetFirstPtr0, _mm256_mul_pd(VectA0, CoefBuff1));
+            _mm256_stream_pd(TargetSecondPtr0, _mm256_mul_pd(VectA1, CoefBuff1));
+            _mm256_stream_pd(TargetFirstPtr1, _mm256_mul_pd(VectA0, CoefBuff3));
+            _mm256_stream_pd(TargetSecondPtr1, _mm256_mul_pd(VectA1, CoefBuff3));
+            _mm256_stream_pd(TargetFirstPtr2,_mm256_mul_pd(VectA0, CoefBuff5));
+            _mm256_stream_pd(TargetSecondPtr2, _mm256_mul_pd(VectA1, CoefBuff5));
+            _mm256_stream_pd(TargetFirstPtr3, _mm256_mul_pd(VectA0, CoefBuff7));
+            _mm256_stream_pd(TargetSecondPtr3, _mm256_mul_pd(VectA1, CoefBuff7));
+        }
+
+        if (VectRange != VectSize){
+            for (size_t ii = i; ii < i + GetCacheLineElem<double>(); ++ii) {
+                for (size_t j = VectRange; j < VectSize; ++j) {
+                    MatC[ii * MatCSoL + j] = VectPtr[j] * CoefPtr[ii];
+                }
+            }
+        }
+    }
+}
+
+template<>
+void OuterProductMachine<double>::CleanEdges(size_t CleanBegin, size_t CleanOutElementsBegin){
+    // CleaningRange (CoefSize - CleanBegin) has to be size smaller than 8, because blockable parts should be done
+    // with ProcessBlock function instead of this one
+    const size_t CleaningRange = CoefSize - CleanBegin;
+
+    __m256d Buffers[GetCacheLineElem<double>()];
+    for (size_t i = 0; i < CleaningRange; i++) {
+        Buffers[i] = _mm256_set1_pd(CoefPtr[CleanBegin + i]);
+    }
+
+    for (size_t j = 0; j < CleanOutElementsBegin; j += GetCacheLineElem<double>()) {
+        __m256d VectFirst = _mm256_load_pd(VectPtr + j);
+        __m256d VectSecond = _mm256_load_pd(VectPtr + j + AVXInfo::f64Cap);
+
+        for (size_t i = 0; i < CleaningRange; i++){
+            double* CleaningTargetUpper = MatC + (i + CleanBegin) * MatCSoL + j;
+            double* CleaningTargetLower = MatC + (i + CleanBegin) * MatCSoL + j + AVXInfo::f64Cap;
+            _mm256_stream_pd(CleaningTargetUpper, _mm256_mul_pd(VectFirst, Buffers[i]));
+            _mm256_stream_pd(CleaningTargetLower, _mm256_mul_pd(VectSecond, Buffers[i]));
+        }
+    }
+
+    for (size_t i = CleanBegin; i < CoefSize; ++i) {
+        for (size_t j = CleanOutElementsBegin; j < VectSize; ++j) {
+            MatC[i * MatCSoL + j] = VectPtr[j] * CoefPtr[i];
+        }
+    }
+}
+
+#endif // __AVX__
 
 // ------------------------------------------
 // Matrix x Vector Multiplication AVX Implementation
@@ -129,10 +225,8 @@ double DotProductMachine<double>::DotProductAligned(size_t Begin, size_t End)
 
 #if defined(__AVX__) && defined(__FMA__)
 
-static constexpr size_t HorizontalPartition = 2048;
-
 template<>
-void VMM<double>::RMVKernel12x4(const size_t HorizontalCord, const size_t VerticalCord){
+void VMM<double>::RMVKernel8x4(const size_t HorizontalCord, const size_t VerticalCord){
     __m256d ResVectBuff0 = _mm256_setzero_pd();
     __m256d ResVectBuff1 = _mm256_setzero_pd();
     __m256d ResVectBuff2 = _mm256_setzero_pd();
@@ -142,9 +236,9 @@ void VMM<double>::RMVKernel12x4(const size_t HorizontalCord, const size_t Vertic
     __m256d ResVectBuff6 = _mm256_setzero_pd();
     __m256d ResVectBuff7 = _mm256_setzero_pd();
 
-    const size_t Range = std::min(HorizontalCord + HorizontalPartition, MatACols);
+    const size_t Range = std::min(HorizontalCord + GetVectChunkSize(), MatACols);
     for(size_t i = HorizontalCord; i < Range; i += 4)
-        #define LoadVectPart(offset) (__m256d)_mm256_stream_load_si256((__m256i*)(RefPtr + (VerticalCord + offset) * MatASoL))
+        #define LoadVectPart(offset) OmitCacheLoad(RefPtr + (VerticalCord + offset) * MatASoL)
     {
         const double* RefPtr = MatA + i;
         __m256d CoefBuff = _mm256_load_pd(VectB + i);
@@ -158,41 +252,22 @@ void VMM<double>::RMVKernel12x4(const size_t HorizontalCord, const size_t Vertic
         ResVectBuff6 = _mm256_fmadd_pd(LoadVectPart(6), CoefBuff, ResVectBuff6);
         ResVectBuff7 = _mm256_fmadd_pd(LoadVectPart(7), CoefBuff, ResVectBuff7);
     }
-#define ToDouble(avx_obj) ((double*)(&avx_obj))
-#define ReturnDoubleAVXSum(avx_obj) ToDouble(avx_obj)[0] + ToDouble(avx_obj)[1] + ToDouble(avx_obj)[2] + ToDouble(avx_obj)[3]
-    VectC[VerticalCord] += ReturnDoubleAVXSum(ResVectBuff0);
-    VectC[VerticalCord + 1] += ReturnDoubleAVXSum(ResVectBuff1);
-    VectC[VerticalCord + 2] += ReturnDoubleAVXSum(ResVectBuff2);
-    VectC[VerticalCord + 3] += ReturnDoubleAVXSum(ResVectBuff3);
-    VectC[VerticalCord + 4] += ReturnDoubleAVXSum(ResVectBuff4);
-    VectC[VerticalCord + 5] += ReturnDoubleAVXSum(ResVectBuff5);
-    VectC[VerticalCord + 6] += ReturnDoubleAVXSum(ResVectBuff6);
-    VectC[VerticalCord + 7] += ReturnDoubleAVXSum(ResVectBuff7);
+    #undef LoadVectPart
+    VectC[VerticalCord] += HorSum(ResVectBuff0);
+    VectC[VerticalCord + 1] += HorSum(ResVectBuff1);
+    VectC[VerticalCord + 2] += HorSum(ResVectBuff2);
+    VectC[VerticalCord + 3] += HorSum(ResVectBuff3);
+    VectC[VerticalCord + 4] += HorSum(ResVectBuff4);
+    VectC[VerticalCord + 5] += HorSum(ResVectBuff5);
+    VectC[VerticalCord + 6] += HorSum(ResVectBuff6);
+    VectC[VerticalCord + 7] += HorSum(ResVectBuff7);
 }
 
-template<>
-void VMM<double>::PerformRMV(){
-    for(size_t i = 0; i < MatACols; i += HorizontalPartition){
-        for(size_t j = 0; j < MatARows; j += 1048552){
-            const size_t Range = std::min(MatARows, MatARows + 1048552);
-#pragma omp parallel for
-            for(size_t jj = j; jj < Range; jj += 8){
-                RMVKernel12x4(i, jj);
-            }
-        }
-    }
-}
+
 
 template<>
 void VMM<double>::CMVKernel12x4(size_t HorizontalCord, size_t VerticalCord){
 
-}
-
-template<>
-void VMM<double>::PerformCMV(){
-//    for(size_t i = 0; i < MatACols; i+= 2048){
-//        for(size_t j = 0; j < MatARows; j+=)
-//    }
 }
 
 #endif
