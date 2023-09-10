@@ -31,6 +31,11 @@ namespace AVXInfo
     constexpr size_t f32Cap { 8 };
     constexpr size_t BitCap { 256 };
     constexpr size_t ByteCap { 256 / 8 };
+
+    template<typename NumType>
+    constexpr size_t GetAVXLength(){
+        return ByteCap / sizeof(NumType);
+    }
 }
 
 #endif

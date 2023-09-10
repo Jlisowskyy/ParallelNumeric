@@ -11,9 +11,31 @@
 #include <cstdlib>
 #include <algorithm>
 #include <mutex>
+#include <vector>
+#include <queue>
 
 #include "../Management/ThreadSolutions.hpp"
-//#include "MatrixMultiplicationSolutions.hpp"
+
+// ------------------------------------------
+// Vector & scalar operations
+// ------------------------------------------
+
+// Todo replace with own thread structure or else generaly reconsider
+template<typename NumType, NumType (*BinOp)(NumType, NumType)>
+void ApplyScalarOpOnArray(NumType* const Result, const NumType* const Arg1, const NumType Scalar, const size_t ArraySize){
+    #pragma omp parallel for
+    for (size_t i = 0; i < ArraySize; ++i){
+        Result[i] = BinOp(Arg1[i], Scalar);
+    }
+}
+
+template<typename NumType, NumType (*BinOp)(NumType, NumType)>
+void ApplyArrayOnArrayOp(NumType* const Result, const NumType* const Arg1, const NumType* const Arg2, const size_t ArraySize){
+    #pragma omp parallel for
+    for (size_t i = 0; i < ArraySize; ++i){
+        Result[i] = BinOp(Arg1[i], Arg2);
+    }
+}
 
 // ------------------------------------------
 // Sum of matrices functions
@@ -190,30 +212,60 @@ class VMM{
     const size_t MatACols;
     const size_t MatASoL;
     const bool IsMatHor;
-    inline void RMVKernel8x4(size_t HorizontalCord, size_t VerticalCord) {};
-    inline void CMVKernel12x4(size_t HorizontalCord, size_t VerticalCord) {};
-    inline void PerformCVM();
-    inline void PerformRVM() {};
-    inline void PerformCMV();
-    inline void PerformRMV();
 
+    // Threading components
+    using P2D = std::tuple<size_t, size_t>;
+
+    std::atomic<bool> WorkDone { false } ;
+    std::mutex QueGuard;
+    std::queue<P2D> CordQue;
+
+    // TODO: popraw nazwy
+    static constexpr size_t RMVKernelHeight() { return 8; }
+    static constexpr size_t RMVKernelWidth() { return AVXInfo::GetAVXLength<NumType>(); }
+    inline void RMVKernel(size_t HorizontalCord, size_t VerticalCord);
+
+
+    static constexpr size_t CMVKernelHeight() { return 12 * AVXInfo::GetAVXLength<NumType>(); }
+    static constexpr size_t CMVKernelWidth() { return 1; }
+    inline void CMVKernel(size_t HorizontalCord, size_t VerticalCord);
+    inline void CMVKernelCleaning(size_t HorizontalCord, size_t VerticalCord);
+    inline void CMVClean(size_t CleanBegin);
+
+    // Threading parts
+    template<void (VMM<NumType>::*Kernel)(size_t, size_t)>
+    void ThreadInstance();
+
+    template<void (VMM<NumType>::*Kernel)(size_t, size_t), size_t KernelHeight>
+    void ProcessVM(size_t HorizontalRange, size_t VerticalRange);
+
+    template<size_t ThreadCap, size_t (*Decider)(size_t)>
+    void ProcessCMV();
+
+    template<size_t ThreadCap, size_t (*Decider)(size_t)>
+    void ProcessRMV();
+
+    // Variables used to communicate between threads
     static constexpr size_t GetVectChunkSize(){
         return (CacheInfo::L1Size / 2) / sizeof(NumType);
     }
 
     static constexpr size_t GetVertMatChunkSize(){
-        return (CacheInfo::L1Size / 2) / sizeof(NumType);
+        return (CacheInfo::L2Size * 9) / sizeof(NumType) / 10;
     }
 
 public:
     VMM(const NumType* MatA, const NumType* VectB, NumType* VectC, size_t MatARows, size_t MatACols, size_t MatASoL, bool IsHor);
+
+    template<size_t ThreadCap, size_t (*Decider)(size_t)>
     void PerformVM(){
-        if (IsMatHor) PerformRVM();
-        else PerformCVM();
+
     }
+
+    template<size_t ThreadCap, size_t (*Decider)(size_t)>
     void PerformMV(){
-        if (IsMatHor) PerformRMV();
-        else PerformCMV();
+        if (IsMatHor) ProcessRMV<ThreadCap, Decider>();
+        else ProcessCMV<ThreadCap, Decider>();
     }
 };
 
@@ -221,24 +273,26 @@ public:
 
 template<>
 constexpr size_t VMM<double>::GetVectChunkSize()
-    // 3072
+    // 3584 - part of vector hold in L1 cache, should be divisible by 4
 {
-    return 3072;
+    return 3584;
 }
 
 template<>
 constexpr size_t VMM<double>::GetVertMatChunkSize()
-    // 1024
+    // 240512 - part of the resulting vector used only to save single kernel load - hold entirely in L2 cache
 {
-//    return 1024;
-    return 1048552;
+    return 240512;
 }
 
 template<>
-void VMM<double>::RMVKernel8x4(size_t HorizontalCord, size_t VerticalCord);
+void VMM<double>::RMVKernel(size_t HorizontalCord, size_t VerticalCord);
 
 template<>
-void VMM<double>::CMVKernel12x4(size_t HorizontalCord, size_t VerticalCord);
+void VMM<double>::CMVKernel(size_t HorizontalCord, size_t VerticalCord);
+
+template<>
+void VMM<double>::CMVKernelCleaning(size_t HorizontalCord, size_t VerticalCord);
 
 #endif
 
@@ -702,75 +756,164 @@ VMM<NumType>::VMM(const NumType *MatA, const NumType *VectB, NumType *VectC, siz
 }
 
 template<typename NumType>
-void VMM<NumType>::PerformCMV() {
-    const size_t Range = (MatARows / 4) * 4;
+void VMM<NumType>::RMVKernel(size_t HorizontalCord, size_t VerticalCord){
 
-    for(size_t i = 0; i < Range; i+=4){
-        NumType acc0 = 0;
-        NumType acc1 = 0;
-        NumType acc2 = 0;
-        NumType acc3 = 0;
-        for(size_t j = 0; j < MatACols; ++j){
-            acc0 += MatA[j * MatASoL + i] * VectB[j];
-            acc1 += MatA[j * MatASoL + i + 1] * VectB[j];
-            acc2 += MatA[j * MatASoL + i + 2] * VectB[j];
-            acc3 += MatA[j * MatASoL + i + 3] * VectB[j];
+}
+
+template<typename NumType>
+void VMM<NumType>::CMVKernel(size_t HorizontalCord, size_t VerticalCord){
+    static constexpr size_t AccumulatorCount{ 12 };
+    size_t Range { std::min(MatACols, HorizontalCord + GetVectChunkSize()) };
+
+    auto ProcessSingleAccPack = [&](size_t Offset) -> void {
+        NumType AccumulatorRegisters[AccumulatorCount] { NumType() };
+
+        for (size_t i = HorizontalCord; i < Range; i += CMVKernelWidth()) {
+            NumType CoefBuff = VectB[i];
+
+            // Should be unrolled
+            for (size_t j = 0; j < AccumulatorCount; ++j) {
+                AccumulatorRegisters[j] += CoefBuff * MatA[i * MatASoL + VerticalCord + j + Offset];
+            }
         }
-        VectC[i] = acc0;
-        VectC[i + 1] = acc1;
-        VectC[i + 2] = acc2;
-        VectC[i + 3] = acc3;
-    }
 
-    if (Range == MatARows) return;
-    // Otherwise, perform cleaning of rows, which are not packable in fours
-
-    NumType Accumulators[4] = { 0 };
-    const size_t CleaningRange = MatARows - Range;
-    for (size_t j = 0; j < MatACols; ++j){
-        for(size_t i = 0; i < CleaningRange; ++i){
-            Accumulators[i] += MatA[j * MatASoL + Range + i] * VectB[j];
+        // Should be unrolled
+        for (size_t i = 0; i < AccumulatorCount; ++i) {
+            VectC[VerticalCord + i + Offset] += AccumulatorRegisters[i];
         }
-    }
+    };
 
-    for(size_t i = 0; i < CleaningRange; ++i){
-        VectC[Range + i] = Accumulators[i];
+    // Should be unrolled
+    for(size_t i = 0; i < AVXInfo::GetAVXLength<NumType>(); ++i){
+        ProcessSingleAccPack(12 * i);
     }
 }
+
 template<typename NumType>
-void VMM<NumType>::PerformRMV() {
-//    for(size_t i = 0; i < MatARows; i+=4){
-//        NumType acc0 = 0;
-//        NumType acc1 = 0;
-//        NumType acc2 = 0;
-//        NumType acc3 = 0;
-//        for(size_t j = 0; j < MatACols; ++j){
-//            acc0 += MatA[i * MatASoL + j] * VectB[j];
-//            acc1 += MatA[(i + 1) * MatASoL + j] * VectB[j];
-//            acc2 += MatA[(i + 2) * MatASoL + j] * VectB[j];
-//            acc3 += MatA[(i + 3) * MatASoL + j] * VectB[j];
-//        }
-//        VectC[i] = acc0;
-//        VectC[i + 1] = acc1;
-//        VectC[i + 2] = acc2;
-//        VectC[i + 3] = acc3;
-//    }
-    for (size_t i = 0; i < MatACols; i += GetVectChunkSize()){
-//#pragma omp parallel for
-        for(size_t j = 0; j < MatARows; j += GetVertMatChunkSize()){
-            const size_t Range = std::min(MatARows, j + GetVertMatChunkSize());
-#pragma omp parallel for
-            for(size_t jj = j; jj < Range; jj += GetCacheLineElem<NumType>()){
-                RMVKernel8x4(i , jj);
+void VMM<NumType>::CMVKernelCleaning(size_t HorizontalCord, size_t VerticalCord) {
+    static constexpr size_t MaxRegisterCount { 8 }; // because x64 has only 16 registers, 8 is a universal number,
+    // allowing to divide different sizes of NumType without any cleaning needed
+    size_t Range { std::min(MatACols, HorizontalCord + GetVectChunkSize()) };
+    static constexpr size_t AccumulatorCount { []() constexpr -> size_t {
+        if constexpr ( GetCacheLineElem<NumType>() > MaxRegisterCount){
+            return MaxRegisterCount;
+        }
+        else return GetCacheLineElem<NumType>();
+    }() };
+
+    auto ProcessSingleAccPack = [&](size_t Offset) -> void {
+        NumType AccumulatorRegisters[AccumulatorCount] { NumType() };
+
+        for (size_t i = HorizontalCord; i < Range; i += CMVKernelWidth()) {
+            NumType CoefBuff = VectB[i];
+
+            // Should be unrolled
+            for (size_t j = 0; j < AccumulatorCount; ++j) {
+                AccumulatorRegisters[j] += CoefBuff * MatA[i * MatASoL + VerticalCord + j + Offset];
+            }
+        }
+
+        // Should be unrolled
+        for (size_t i = 0; i < AccumulatorCount; ++i) {
+            VectC[VerticalCord + i + Offset] += AccumulatorRegisters[i];
+        }
+    };
+
+    if constexpr(GetCacheLineElem<NumType>() > MaxRegisterCount){
+        const size_t AccPackRange {GetCacheLineElem<NumType>() / MaxRegisterCount }; // divides CacheLine to chunks fitting in registers
+
+        // Should be unrolled
+        for (size_t i = 0 ; i < AccPackRange; ++i){
+            ProcessSingleAccPack(AccumulatorCount * i);
+        }
+    }
+    else{
+        ProcessSingleAccPack(0);
+    }
+
+}
+
+template<typename NumType>
+void VMM<NumType>::CMVClean(size_t CleanBegin) {
+    for (size_t j = 0; j < MatACols; j += GetVectChunkSize()) {
+        for (size_t i = CleanBegin; i < MatARows; i += GetCacheLineElem<NumType>()) {
+            CMVKernelCleaning(j, i);
+        }
+    }
+}
+
+template<typename NumType>
+template<void (VMM<NumType>::*Kernel)(size_t, size_t)>
+void VMM<NumType>::ThreadInstance() {
+    while(!WorkDone || !CordQue.empty()){
+        QueGuard.lock();
+
+        if (CordQue.empty()) {
+            QueGuard.unlock();
+            continue;
+        }
+
+        P2D TargetCord = CordQue.front();
+        CordQue.pop();
+        QueGuard.unlock();
+
+        (this->*Kernel)(std::get<0>(TargetCord), std::get<1>(TargetCord));
+    }
+}
+
+template<typename NumType>
+template<void (VMM<NumType>::*Kernel)(size_t, size_t), size_t KernelHeight>
+void VMM<NumType>::ProcessVM(size_t HorizontalRange, size_t VerticalRange) {
+    for (size_t i = 0; i < HorizontalRange; i += GetVectChunkSize()){
+        for(size_t j = 0; j < VerticalRange; j += GetVertMatChunkSize()){
+            const size_t Range = std::min(VerticalRange, j + GetVertMatChunkSize());
+            #pragma omp parallel for
+            for(size_t jj = j; jj < Range; jj += KernelHeight){
+                (this->*Kernel)(i, jj);
             }
         }
     }
-    // Cleaning is not necessary, if there is no memory optimization, due to alignment
+}
+
+// TODO: THERE IS ULTRA RARE THREAD RACE DO IT WITH COND VARIABLES INSTEAD OF SLEEP
+template<typename NumType>
+template<size_t ThreadCap, size_t (*Decider)(size_t)>
+void VMM<NumType>::ProcessCMV() {
+    const size_t VerRange { (MatARows / CMVKernelHeight()) * CMVKernelHeight() };
+    const size_t OperationCount { MatARows * MatACols };
+
+    if (OperationCount < ThreadInfo::ThreadedStartingThreshold){
+        ProcessVM<&VMM<NumType>::CMVKernel, CMVKernelHeight()>(MatACols, VerRange);
+        CMVClean(VerRange);
+    }
+    else{
+        const size_t ThreadAmount { Decider(OperationCount) };
+        ThreadPackage& Threads = ExecuteThreadsWNJoining(ThreadAmount,
+                                                         &VMM<NumType>::ThreadInstance<VMM<NumType>::CMVKernel>, this);
+
+        for (size_t i = 0; i < MatACols; i += GetVectChunkSize()){
+            while(!CordQue.empty()){
+                std::this_thread::sleep_for(std::chrono::microseconds(1));
+            }
+            for(size_t j = 0; j < VerRange; j += GetVertMatChunkSize()){
+                const size_t Range = std::min(VerRange, j + GetVertMatChunkSize());
+                for(size_t jj = j; jj < Range; jj += CMVKernelHeight()){
+                    QueGuard.lock();
+                    CordQue.emplace(i, jj);
+                    QueGuard.unlock();
+                }
+            }
+        }
+        WorkDone = true;
+        CMVClean(VerRange);
+        JoinThreads(ThreadAmount, Threads);
+    }
 }
 
 template<typename NumType>
-void VMM<NumType>::PerformCVM() {
-
+template<size_t ThreadCap, size_t (*Decider)(size_t)>
+void VMM<NumType>::ProcessRMV() {
+    ProcessVM<&VMM<NumType>::RMVKernel, RMVKernelHeight()>(MatACols, MatARows);
 }
 
 #endif // PARALLELNUM_NUMERICAL_CORE_H_

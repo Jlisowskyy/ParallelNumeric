@@ -52,9 +52,9 @@ if(OpenMP_CXX_FOUND)
     target_link_libraries(ParallelNumeric PUBLIC OpenMP::OpenMP_CXX)
 endif()
 
-set(NEEDED_FLAGS "-mavx;-mavx2;-mfma;-masm=intel")
+set(NEEDED_FLAGS "-mavx;-mavx2;-mfma;-masm=intel;")
 set(WARNING_FLAGS "-Wall;-Wextra;-Wformat=2;-Wunused;")
-set(OPTIMIZATION_FLAGS "-fopenmp;-march=native;-O3")
-set(DEBUG_FLAGS "-g;-Rpass-analysis=inline")
+set(OPTIMIZATION_FLAGS "-fopenmp;-march=native;-O3;")
+set(DEBUG_FLAGS "-g;-Rpass-analysis=inline;")
 
 target_compile_options(ParallelNumeric PUBLIC ${NEEDED_FLAGS} ${WARNING_FLAGS} ${OPTIMIZATION_FLAGS})

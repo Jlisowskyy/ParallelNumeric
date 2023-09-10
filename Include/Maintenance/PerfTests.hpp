@@ -170,7 +170,7 @@ void PerformOutProdTest(size_t OpCount, unsigned RunsToGo, long Seed = 0) {
             },Verbose>(OpCount, RunsToGo, Seed);
 }
 
-template<bool Verbose = false, bool IsArgMatHor = false, bool IsRetMatHor = false,bool IsVectHor = false,
+template<bool Verbose = false, bool IsArgMatHor = false, bool IsVectHor = false,
         typename NumType = DefaultNumType, D2Pack(*GetDims)(size_t) = Gen2Dims>
 void PerformVectMatMultTest(size_t OperationCount, unsigned RunsToGo, long Seed = 0){
     using MatT = Matrix1<NumType>;

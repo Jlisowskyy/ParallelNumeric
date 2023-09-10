@@ -221,7 +221,7 @@ public:
 
         // TODO: Forward thredcap and decider
         auto Machine = GetVMM(A, B, RetVal);
-        Machine.PerformMV();
+        Machine.template PerformMV<ThreadCap, Decider>();
 
         return RetVal;
     }
@@ -233,7 +233,7 @@ public:
         Vector<NumType> RetVal(B.Cols, (NumType)0, true);
 
         auto Machine = GetVMM(B, A, RetVal);
-        Machine.PerformVM();
+        Machine.template PerformVM<ThreadCap, Decider>();
 
         return RetVal;
     }

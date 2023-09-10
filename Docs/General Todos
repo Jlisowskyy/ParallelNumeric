@@ -1,3 +1,4 @@
 1) Parametrize operation do chose horizontalness of results
 2) Optimize threading for worst cases ( There are some possible in: Sum / Inner Prod)
 3) Optimize Memory usage for edge cases
+4) Reconsider general calling conventions

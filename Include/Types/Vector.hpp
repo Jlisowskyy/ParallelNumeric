@@ -263,6 +263,130 @@ public:
         }
     }
 
+// --------------------------------------
+// TODO: reconsider this part:
+// --------------------------------------
+
+    // TODO: make universal template for +/-
+
+private:
+    template<NumType (*BinOp)(NumType, NumType)>
+    friend inline Vector<NumType> GetArrOnArrResult(const Vector<NumType>& A, const Vector<NumType>& B){
+        Vector<NumType> RetVal(A.Size);
+        return ApplyArrayOnArrayOp<NumType, BinOp>(RetVal.Array, A.Array, B.Array, B.Size);
+    }
+
+    template<NumType (*BinOp)(NumType, NumType)>
+    friend inline Vector<NumType> GetScalOnArrResult(const Vector<NumType>& A, NumType& B){
+        Vector<NumType> RetVal(A.Size);
+        return ApplyScalarOpOnArray<NumType, BinOp>(RetVal.Array, A.Array, B, A.Size);
+    }
+public:
+
+    Vector<NumType>& operator+=(const Vector<NumType>& B){
+        if (Size != B.Size) [[unlikely]]{
+            throw std::runtime_error("[ERROR] Not able to perform Vector addition: not same size\n");
+        }
+        ApplyArrayOnArrayOp<NumType, std::plus<NumType>>(Array, Array, B.Array, B.Size);
+        return *this;
+    }
+
+    Vector<NumType>& operator+=(const NumType& B){
+        ApplyScalarOpOnArray<NumType, std::plus<NumType>>(Array, Array, B, Size);
+        return *this;
+    }
+
+    friend Vector<NumType> operator+(const Vector<NumType>& A, const Vector<NumType>& B){
+        if (A.Size != B.Size){
+            throw std::runtime_error("[ERROR] Not able to perform Vector addition: Not same sizes\n");
+        }
+
+        return GetArrOnArrResult<std::plus<NumType>>(A, B);
+    }
+
+    friend Vector<NumType> operator+(const Vector<NumType>& A, const NumType& B){
+        if (A.Size != B.Size){
+            throw std::runtime_error("[ERROR] Not able to perform Vector addition: Not same sizes\n");
+        }
+
+        return GetScalOnArrResult<std::plus<NumType>>(A, B);
+    }
+
+    Vector<NumType>& operator-=(const Vector<NumType>& B){
+        if (Size != B.Size) [[unlikely]]{
+            throw std::runtime_error("[ERROR] Not able to perform Vector substitution: not same size\n");
+        }
+        ApplyArrayOnArrayOp<NumType, std::minus<NumType>>(Array, Array, B.Array, B.Size);
+        return *this;
+    }
+
+    Vector<NumType>& operator-=(const NumType& B){
+        return *this += (-B);
+    }
+
+    friend Vector<NumType> operator-(const Vector<NumType>& A, const Vector<NumType>& B){
+        if (A.Size != B.Size){
+            throw std::runtime_error("[ERROR] Not able to perform Vector substitution: Not same sizes\n");
+        }
+        return GetArrOnArrResult<std::minus<NumType>>(A, B);
+    }
+
+    friend Vector<NumType> operator-(const Vector<NumType>& A, const NumType& B){
+        if (A.Size != B.Size){
+            throw std::runtime_error("[ERROR] Not able to perform Vector substitution: Not same sizes\n");
+        }
+        return GetScalOnArrResult<std::minus<NumType>>(A, B);
+    }
+
+    Vector<NumType>& operator*=(const NumType& B){
+        ApplyScalarOpOnArray<NumType, std::multiplies<NumType>>(Array, Array, B, Size);
+        return *this;
+    }
+
+    Vector<NumType>& operator/=(const NumType& B){
+        if (B == 0){ // Todo: reconsider sort of switch to disable this check or else
+            throw std::runtime_error("[ERROR] Division by zero\n");
+        }
+
+        const NumType Coef { 1 / B };
+        ApplyScalarOpOnArray<NumType, std::multiplies<NumType>>(Array, Array, Coef, Size);
+        return *this;
+    }
+
+    friend Vector<NumType> operator*(const Vector<NumType>& A, const NumType& B){
+        return GetScalOnArrResult<std::multiplies<NumType>>(A, B);
+    }
+
+    friend Vector<NumType> operator/(const Vector<NumType>& A, const NumType& B){
+        if (B == 0){ // Todo: reconsider sort of switch to disable this check or else
+            throw std::runtime_error("[ERROR] Division by zero\n");
+        }
+
+        const NumType Coef { 1 / B };
+        return GetScalOnArrResult<std::multiplies<NumType>>(A, Coef);
+    }
+
+    friend Vector<NumType> ElemByElemMult(const Vector<NumType>& A, const Vector<NumType>& B){
+        return GetArrOnArrResult<std::multiplies<NumType>>(A,B);
+    }
+
+    Vector<NumType>& ApplyElemByElemMult(const Vector<NumType>& B){
+        ApplyArrayOnArrayOp<NumType, std::multiplies<NumType>>(Array, Array, B.Array, B.Size);
+        return *this;
+    }
+
+    friend Vector<NumType> ElemByElemDiv(const Vector<NumType>& A, const Vector<NumType>& B){
+        return GetArrOnArrResult<std::divides<NumType>>(A,B);
+    }
+
+    Vector<NumType>& ApplyElemByElemDiv(const Vector<NumType>& B){
+        ApplyArrayOnArrayOp<NumType, std::multiplies<NumType>>(Array, Array, B.Array, B.Size);
+        return *this;
+    }
+
+// --------------------------------------
+// --------------------------------------
+// --------------------------------------
 };
 
 template<typename NumType>
@@ -356,7 +480,10 @@ void Vector<NumType>::AllocateArray()
     // Allocates memory aligned to cache line length
 {
     if (!MM) [[likely]] {
-        size_t ByteSize = Size * sizeof(NumType);
+        // To unify allocation and algorithms,
+        // all vectors like matrices are extended to sizes divisible by length of cache line
+        const size_t ElementsToExtend { GetCacheLineElem<NumType>() - Size % GetCacheLineElem<NumType>() };
+        const size_t ByteSize { (Size + ElementsToExtend) * sizeof(NumType) } ;
 #ifdef OP_SYS_WIN
         Array = (NumType*)_aligned_malloc(ByteSize, CacheInfo::LineSize);
 #elif defined(OP_SYS_UNIX)
