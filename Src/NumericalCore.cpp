@@ -228,14 +228,14 @@ void OuterProductMachine<double>::CleanEdges(size_t CleanBegin, size_t CleanOutE
 template<>
 void VMM<double>::RMVKernel(size_t HorizontalCord, size_t VerticalCord)
     // Works because of cache alignment, there is no need to check boundary for horizontal position
+    // Vertical length should be divisible by 2 due to port pipeline stacking
 {
+    static constexpr size_t OpRange { RMVKernelHeight() / 2 };
     __m256d AccumulatorRegisters[RMVKernelHeight()] { _mm256_setzero_pd() };
     __m256d MatLineRegisters[2];
 
-    // TODO TRY TO EXPAND AVX REGISTERS UTILISATION
-
     const size_t Range { std::min(HorizontalCord + GetVectChunkSize(), MatACols) };
-    for(size_t i = HorizontalCord; i < Range; i += 4)
+    for(size_t i = HorizontalCord; i < Range; i += RMVKernelWidth())
     {
         __m256d CoefBuff = _mm256_load_pd(VectB + i);
         auto ApplySingleLoadOperation = [&](size_t Offset) -> void{
@@ -246,20 +246,40 @@ void VMM<double>::RMVKernel(size_t HorizontalCord, size_t VerticalCord)
             AccumulatorRegisters[Offset + 1] = _mm256_fmadd_pd(MatLineRegisters[1], CoefBuff, AccumulatorRegisters[Offset + 1]);
         };
 
-        ApplySingleLoadOperation(0);
-        ApplySingleLoadOperation(2);
-        ApplySingleLoadOperation(4);
-        ApplySingleLoadOperation(6);
+        // Should be unrolled
+        for (size_t j = 0; j < OpRange; ++j){
+            ApplySingleLoadOperation(j * 2);
+        }
     }
 
-    VectC[VerticalCord] += HorSum(AccumulatorRegisters[0]);
-    VectC[VerticalCord + 1] += HorSum(AccumulatorRegisters[1]);
-    VectC[VerticalCord + 2] += HorSum(AccumulatorRegisters[2]);
-    VectC[VerticalCord + 3] += HorSum(AccumulatorRegisters[3]);
-    VectC[VerticalCord + 4] += HorSum(AccumulatorRegisters[4]);
-    VectC[VerticalCord + 5] += HorSum(AccumulatorRegisters[5]);
-    VectC[VerticalCord + 6] += HorSum(AccumulatorRegisters[6]);
-    VectC[VerticalCord + 7] += HorSum(AccumulatorRegisters[7]);
+    // Should be unrolled
+    for (size_t i = 0; i < RMVKernelHeight(); ++i){
+        VectC[VerticalCord + i] += HorSum(AccumulatorRegisters[i]);
+    }
+}
+
+template<>
+void VMM<double>::RMVKernelCleaning(size_t HorizontalCord, size_t VerticalCord){
+    const size_t CleanRange { MatARows - VerticalCord };
+    if (CleanRange == 0) return;
+
+    __m256d AccumulatorRegisters[ RMVKernelHeight() - 1 ] { _mm256_setzero_pd() };
+    __m256d CoefRegister;
+    size_t Range { std::min(MatACols, HorizontalCord + GetVectChunkSize()) };
+
+    for (size_t i = HorizontalCord; i < Range; i += RMVKernelWidth()){
+        CoefRegister = _mm256_load_pd(VectB + i);
+
+        // To reconsider
+        for (size_t j = 0; j < CleanRange; ++j){
+            __m256d MatLine = OmitCacheLoad(MatA + (VerticalCord + j) * MatASoL + i);
+            AccumulatorRegisters[j] = _mm256_fmadd_pd(CoefRegister, MatLine, AccumulatorRegisters[j]);
+        }
+    }
+
+    for (size_t j = 0; j < CleanRange; ++j){
+        VectC[VerticalCord + j] += HorSum(AccumulatorRegisters[j]);
+    }
 }
 
 template<>
@@ -330,6 +350,129 @@ void VMM<double>::CMVKernelCleaning(size_t HorizontalCord, size_t VerticalCord){
     _mm256_store_pd(VectC + VerticalCord + AVXInfo::f64Cap,
                     _mm256_add_pd(_mm256_load_pd(VectC + VerticalCord + AVXInfo::f64Cap), Accumulator1)
     );
+}
+
+
+template<>
+void VMM<double>::RVMKernel(size_t HorizontalCord, size_t VerticalCord) {
+    static constexpr size_t AccumulatorCount{ 12 };
+    static constexpr size_t CoefBuffCount{ 1 };
+    static constexpr size_t OnMatLineCount{ 2 };
+    size_t Range { std::min(MatARows, VerticalCord + GetVectChunkSize()) };
+    __m256d AccumulatorRegisters[AccumulatorCount] { _mm256_setzero_pd() };
+    __m256d CoefRegisters[CoefBuffCount];
+    __m256d OnMatLines[OnMatLineCount];
+
+    auto ProcessSingleMatLoad = [&](const size_t HorOffset, const size_t VerCord) -> void{
+        // Should be unrolled
+        for(size_t j = 0; j < OnMatLineCount; ++j){
+            OnMatLines[j] = OmitCacheLoad(MatA + VerCord * MatASoL + HorizontalCord + (j + HorOffset) * AVXInfo::f64Cap);
+        }
+
+        // Should be unrolled
+        for(size_t j = 0; j < OnMatLineCount; ++j){
+            AccumulatorRegisters[j + HorOffset * OnMatLineCount] =
+                    _mm256_fmadd_pd(CoefRegisters[0], OnMatLines[j], AccumulatorRegisters[j + HorOffset * OnMatLineCount]);
+        }
+    };
+
+    for (size_t i = VerticalCord; i < Range; i += RVMKernelHeight() ){
+        CoefRegisters[0] = _mm256_set1_pd(VectB[i]);
+
+        ProcessSingleMatLoad(0, i);
+        ProcessSingleMatLoad(1, i);
+        ProcessSingleMatLoad(2, i);
+        ProcessSingleMatLoad(3, i);
+        ProcessSingleMatLoad(4, i);
+        ProcessSingleMatLoad(5, i);
+    }
+
+    // Should be unrolled
+    for(size_t j = 0; j < AccumulatorCount; ++j){
+        _mm256_store_pd(VectC + HorizontalCord + j * AVXInfo::f64Cap,
+                        _mm256_add_pd(_mm256_load_pd(VectC + HorizontalCord + j * AVXInfo::f64Cap), AccumulatorRegisters[j])
+        );
+    }
+}
+
+template<>
+void VMM<double>::RVMKernelCleaning(size_t HorizontalCord, size_t VerticalCord) {
+    __m256d Accumulator0{ _mm256_setzero_pd() };
+    __m256d Accumulator1{ _mm256_setzero_pd() };
+    __m256d MatLine0;
+    __m256d MatLine1;
+    size_t Range { std::min(MatARows, VerticalCord + GetVectChunkSize()) };
+
+    for (size_t i = VerticalCord; i < Range; ++i){
+        __m256d CoefBuff = _mm256_set1_pd(VectB[i]);
+        MatLine0 = OmitCacheLoad(MatA + i * MatASoL + HorizontalCord);
+        MatLine1 = OmitCacheLoad(MatA + i * MatASoL + HorizontalCord + AVXInfo::f64Cap);
+
+        Accumulator0 = _mm256_fmadd_pd(MatLine0, CoefBuff, Accumulator0);
+        Accumulator1 = _mm256_fmadd_pd(MatLine1, CoefBuff, Accumulator1);
+    }
+
+    _mm256_store_pd(VectC + HorizontalCord,
+                    _mm256_add_pd(_mm256_load_pd(VectC + HorizontalCord), Accumulator0)
+    );
+
+    _mm256_store_pd(VectC + HorizontalCord + AVXInfo::f64Cap,
+                    _mm256_add_pd(_mm256_load_pd(VectC + HorizontalCord + AVXInfo::f64Cap), Accumulator1)
+    );
+}
+
+template<>
+void VMM<double>::CVMKernel(size_t HorizontalCord, size_t VerticalCord){
+    static constexpr size_t OpRange { CVMKernelWidth() / 2 };
+    __m256d AccumulatorRegisters[CVMKernelWidth()] { _mm256_setzero_pd() };
+    __m256d MatLineRegisters[2];
+
+    const size_t Range { std::min(VerticalCord + GetVectChunkSize(), MatARows) };
+    for(size_t i = VerticalCord; i < Range; i += CVMKernelHeight())
+    {
+        __m256d CoefBuff = _mm256_load_pd(VectB + i);
+        auto ApplySingleLoadOperation = [&](size_t Offset) -> void{
+            MatLineRegisters[0] = OmitCacheLoad(MatA + (HorizontalCord + Offset) * MatASoL + i);
+            MatLineRegisters[1] = OmitCacheLoad(MatA + (HorizontalCord + Offset + 1) * MatASoL + i);
+
+            AccumulatorRegisters[Offset] = _mm256_fmadd_pd(MatLineRegisters[0], CoefBuff, AccumulatorRegisters[Offset]);
+            AccumulatorRegisters[Offset + 1] = _mm256_fmadd_pd(MatLineRegisters[1], CoefBuff, AccumulatorRegisters[Offset + 1]);
+        };
+
+        // Should be unrolled
+        for (size_t j = 0; j < OpRange; ++j){
+            ApplySingleLoadOperation(j * 2);
+        }
+    }
+
+    // Should be unrolled
+    for (size_t i = 0; i < CVMKernelWidth(); ++i){
+        VectC[HorizontalCord + i] += HorSum(AccumulatorRegisters[i]);
+    }
+}
+
+template<>
+void VMM<double>::CVMKernelCleaning(size_t HorizontalCord, size_t VerticalCord){
+    const size_t CleanRange { MatACols - HorizontalCord };
+    if (CleanRange == 0) return;
+
+    __m256d AccumulatorRegisters[ CVMKernelWidth() - 1 ] { _mm256_setzero_pd() };
+    __m256d CoefRegister;
+    size_t Range { std::min(MatARows, VerticalCord + GetVectChunkSize()) };
+
+    for (size_t i = VerticalCord; i < Range; i += CVMKernelHeight()){
+        CoefRegister = _mm256_load_pd(VectB + i);
+
+        // To reconsider
+        for (size_t j = 0; j < CleanRange; ++j){
+            __m256d MatLine = OmitCacheLoad(MatA + (HorizontalCord + j) * MatASoL + i);
+            AccumulatorRegisters[j] = _mm256_fmadd_pd(CoefRegister, MatLine, AccumulatorRegisters[j]);
+        }
+    }
+
+    for (size_t j = 0; j < CleanRange; ++j){
+        VectC[HorizontalCord + j] += HorSum(AccumulatorRegisters[j]);
+    }
 }
 
 #endif

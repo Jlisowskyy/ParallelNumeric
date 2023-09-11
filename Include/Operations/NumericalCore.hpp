@@ -220,10 +220,14 @@ class VMM{
     std::mutex QueGuard;
     std::queue<P2D> CordQue;
 
-    // TODO: popraw nazwy
+    // TODO: Make cleaning kernels interal parts of threaded execution to not make cleaning a monolithic operational block
+    // TODO: Make universal template to have only 2 kernels (templated) Dot product like and Mat func conversion like
+    // should be an easy work
     static constexpr size_t RMVKernelHeight() { return 8; }
     static constexpr size_t RMVKernelWidth() { return AVXInfo::GetAVXLength<NumType>(); }
     inline void RMVKernel(size_t HorizontalCord, size_t VerticalCord);
+    inline void RMVKernelCleaning(size_t HorizontalCord, size_t VerticalCord);
+    inline void RMVClean(size_t CleanBegin);
 
 
     static constexpr size_t CMVKernelHeight() { return 12 * AVXInfo::GetAVXLength<NumType>(); }
@@ -232,25 +236,45 @@ class VMM{
     inline void CMVKernelCleaning(size_t HorizontalCord, size_t VerticalCord);
     inline void CMVClean(size_t CleanBegin);
 
+    static constexpr size_t RVMKernelHeight() { return 1; }
+    static constexpr size_t RVMKernelWidth() { return 12 * AVXInfo::GetAVXLength<NumType>(); }
+    inline void RVMKernel(size_t HorizontalCord, size_t VerticalCord) {} // TODO
+    inline void RVMKernelCleaning(size_t HorizontalCord, size_t VerticalCord) {} // TODO
+    inline void RVMClean(size_t CleanBegin);
+
+    static constexpr size_t CVMKernelHeight() { return AVXInfo::GetAVXLength<NumType>(); }
+    static constexpr size_t CVMKernelWidth() { return 8; }
+    inline void CVMKernel(size_t HorizontalCord, size_t VerticalCord) {} // TODO
+    inline void CVMKernelCleaning(size_t HorizontalCord, size_t VerticalCord) {} // TODO
+    inline void CVMClean(size_t CleanBegin);
+
     // Threading parts
     template<void (VMM<NumType>::*Kernel)(size_t, size_t)>
     void ThreadInstance();
 
     template<void (VMM<NumType>::*Kernel)(size_t, size_t), size_t KernelHeight>
-    void ProcessVM(size_t HorizontalRange, size_t VerticalRange);
+    void ProcessMVNotThreaded(size_t VerticalRange);
 
-    template<size_t ThreadCap, size_t (*Decider)(size_t)>
-    void ProcessCMV();
+    template<void (VMM<NumType>::*Kernel)(size_t, size_t), size_t KernelWidth>
+    void ProcessVMNotThreaded(size_t HorizontalRange);
 
-    template<size_t ThreadCap, size_t (*Decider)(size_t)>
-    void ProcessRMV();
+    template<void (VMM<NumType>::*Kernel)(size_t, size_t),
+            void (VMM<NumType>::*CleaningProc)(size_t), size_t KernelHeight,
+            size_t ThreadCap, size_t (*Decider)(size_t)>
+    void ProcessMVThreaded();
+
+    template<void (VMM<NumType>::*Kernel)(size_t, size_t),
+            void (VMM<NumType>::*CleaningProc)(size_t), size_t KernelHeight,
+            size_t ThreadCap, size_t (*Decider)(size_t)>
+    void ProcessVMThreaded();
+
 
     // Variables used to communicate between threads
     static constexpr size_t GetVectChunkSize(){
-        return (CacheInfo::L1Size / 2) / sizeof(NumType);
+        return (7 * (CacheInfo::L1Size / sizeof(NumType))) / 8;
     }
 
-    static constexpr size_t GetVertMatChunkSize(){
+    static constexpr size_t GetResVectChunkSize(){
         return (CacheInfo::L2Size * 9) / sizeof(NumType) / 10;
     }
 
@@ -259,13 +283,14 @@ public:
 
     template<size_t ThreadCap, size_t (*Decider)(size_t)>
     void PerformVM(){
-
+        if (IsMatHor) ProcessVMThreaded<&VMM<NumType>::RVMKernel, &VMM<NumType>::RVMClean, RVMKernelWidth(), ThreadCap, Decider>();
+        else ProcessVMThreaded<&VMM<NumType>::CVMKernel, &VMM<NumType>::CVMClean, CVMKernelWidth(), ThreadCap, Decider>();
     }
 
     template<size_t ThreadCap, size_t (*Decider)(size_t)>
     void PerformMV(){
-        if (IsMatHor) ProcessRMV<ThreadCap, Decider>();
-        else ProcessCMV<ThreadCap, Decider>();
+        if (IsMatHor) ProcessMVThreaded<&VMM<NumType>::RMVKernel, &VMM<NumType>::RMVClean, RMVKernelHeight(), ThreadCap, Decider>();
+        else ProcessMVThreaded<&VMM<NumType>::CMVKernel, &VMM<NumType>::CMVClean, CMVKernelHeight(), ThreadCap, Decider>();
     }
 };
 
@@ -279,20 +304,35 @@ constexpr size_t VMM<double>::GetVectChunkSize()
 }
 
 template<>
-constexpr size_t VMM<double>::GetVertMatChunkSize()
+constexpr size_t VMM<double>::GetResVectChunkSize()
     // 240512 - part of the resulting vector used only to save single kernel load - hold entirely in L2 cache
 {
-    return 240512;
+    return 240576;
 }
 
 template<>
 void VMM<double>::RMVKernel(size_t HorizontalCord, size_t VerticalCord);
 
 template<>
+void VMM<double>::RMVKernelCleaning(size_t HorizontalCord, size_t VerticalCord);
+
+template<>
 void VMM<double>::CMVKernel(size_t HorizontalCord, size_t VerticalCord);
 
 template<>
 void VMM<double>::CMVKernelCleaning(size_t HorizontalCord, size_t VerticalCord);
+
+template<>
+void VMM<double>::RVMKernel(size_t HorizontalCord, size_t VerticalCord);
+
+template<>
+void VMM<double>::RVMKernelCleaning(size_t HorizontalCord, size_t VerticalCord);
+
+template<>
+void VMM<double>::CVMKernel(size_t HorizontalCord, size_t VerticalCord);
+
+template<>
+void VMM<double>::CVMKernelCleaning(size_t HorizontalCord, size_t VerticalCord);
 
 #endif
 
@@ -757,7 +797,56 @@ VMM<NumType>::VMM(const NumType *MatA, const NumType *VectB, NumType *VectC, siz
 
 template<typename NumType>
 void VMM<NumType>::RMVKernel(size_t HorizontalCord, size_t VerticalCord){
+    const size_t Range { std::min(HorizontalCord + GetVectChunkSize(), MatACols) };
+    NumType AccumulatorRegisters[ RMVKernelHeight() ] { NumType() };
+    NumType CoefRegister;
 
+    for (size_t i = HorizontalCord; i < Range; ++i){
+        CoefRegister = VectB[i];
+
+        // Should be unrolled
+        for (size_t j = 0; j < RMVKernelHeight(); ++j){
+            AccumulatorRegisters[j] += CoefRegister * MatA[(VerticalCord + j) * MatASoL + i];
+        }
+    }
+
+    // Should be unrolled
+    for (size_t i = 0; i < RMVKernelHeight(); ++i){
+        VectC[VerticalCord + i] += AccumulatorRegisters[i];
+    }
+}
+
+template<typename NumType>
+void VMM<NumType>::RMVClean(size_t CleanBegin)
+{
+    for (size_t j = 0; j < MatACols; j += GetVectChunkSize()) {
+        RMVKernelCleaning(j, CleanBegin);
+    }
+}
+
+template<typename NumType>
+void VMM<NumType>::RMVKernelCleaning(size_t HorizontalCord, size_t VerticalCord)
+// CleanRange (MatARows - CleanBegin) < 8
+// TODO: not sure bout inner loop
+{
+    const size_t CleanRange { MatARows - VerticalCord };
+    if (CleanRange == 0) return;
+
+    NumType AccumulatorRegisters[ RMVKernelHeight() - 1 ] { NumType() };
+    NumType CoefRegister;
+    size_t Range { std::min(MatACols, HorizontalCord + GetVectChunkSize()) };
+
+    for (size_t i = HorizontalCord; i < Range; ++i){
+        CoefRegister = VectB[i];
+        // To reconsider
+        for (size_t j = 0; j < CleanRange; ++j){
+            AccumulatorRegisters[j] += CoefRegister * MatA[(VerticalCord + j) * MatASoL + i];
+        }
+    }
+
+    for (size_t j = 0; j < CleanRange; ++j){
+        VectC[CleanRange + j] += AccumulatorRegisters[j];
+    }
 }
 
 template<typename NumType>
@@ -843,6 +932,22 @@ void VMM<NumType>::CMVClean(size_t CleanBegin) {
 }
 
 template<typename NumType>
+void VMM<NumType>::RVMClean(size_t CleanBegin) {
+    for (size_t j = 0; j < MatARows; j += GetVectChunkSize()) {
+        for (size_t i = CleanBegin; i < MatACols; i += GetCacheLineElem<NumType>()) {
+            RVMKernelCleaning(i, j);
+        }
+    }
+}
+
+template<typename NumType>
+void VMM<NumType>::CVMClean(size_t CleanBegin) {
+    for (size_t j = 0; j < MatARows; j += GetVectChunkSize()) {
+        CVMKernelCleaning(CleanBegin, j);
+    }
+}
+
+template<typename NumType>
 template<void (VMM<NumType>::*Kernel)(size_t, size_t)>
 void VMM<NumType>::ThreadInstance() {
     while(!WorkDone || !CordQue.empty()){
@@ -863,11 +968,10 @@ void VMM<NumType>::ThreadInstance() {
 
 template<typename NumType>
 template<void (VMM<NumType>::*Kernel)(size_t, size_t), size_t KernelHeight>
-void VMM<NumType>::ProcessVM(size_t HorizontalRange, size_t VerticalRange) {
-    for (size_t i = 0; i < HorizontalRange; i += GetVectChunkSize()){
-        for(size_t j = 0; j < VerticalRange; j += GetVertMatChunkSize()){
-            const size_t Range = std::min(VerticalRange, j + GetVertMatChunkSize());
-            #pragma omp parallel for
+void VMM<NumType>::ProcessMVNotThreaded(size_t VerticalRange) {
+    for (size_t i = 0; i < MatACols; i += GetVectChunkSize()){
+        for(size_t j = 0; j < VerticalRange; j += GetResVectChunkSize()){
+            const size_t Range = std::min(VerticalRange, j + GetResVectChunkSize());
             for(size_t jj = j; jj < Range; jj += KernelHeight){
                 (this->*Kernel)(i, jj);
             }
@@ -875,29 +979,42 @@ void VMM<NumType>::ProcessVM(size_t HorizontalRange, size_t VerticalRange) {
     }
 }
 
+template<typename NumType>
+template<void (VMM<NumType>::*Kernel)(size_t, size_t), size_t KernelWidth>
+void VMM<NumType>::ProcessVMNotThreaded(size_t HorizontalRange) {
+    for (size_t i = 0; i < MatARows; i += GetVectChunkSize()){
+        for(size_t j = 0; j < HorizontalRange; j += GetResVectChunkSize()){
+            const size_t Range = std::min(HorizontalRange, j + GetResVectChunkSize());
+            for(size_t jj = j; jj < Range; jj += KernelWidth){
+                (this->*Kernel)(jj, i);
+            }
+        }
+    }
+}
+
 // TODO: THERE IS ULTRA RARE THREAD RACE DO IT WITH COND VARIABLES INSTEAD OF SLEEP
 template<typename NumType>
-template<size_t ThreadCap, size_t (*Decider)(size_t)>
-void VMM<NumType>::ProcessCMV() {
-    const size_t VerRange { (MatARows / CMVKernelHeight()) * CMVKernelHeight() };
+template<void (VMM<NumType>::*Kernel)(size_t, size_t), void (VMM<NumType>::*CleaningProc)(size_t),
+        size_t KernelHeight, size_t ThreadCap, size_t (*Decider)(size_t)>
+void VMM<NumType>::ProcessMVThreaded() {
+    const size_t VerRange { (MatARows / KernelHeight) * KernelHeight };
     const size_t OperationCount { MatARows * MatACols };
 
     if (OperationCount < ThreadInfo::ThreadedStartingThreshold){
-        ProcessVM<&VMM<NumType>::CMVKernel, CMVKernelHeight()>(MatACols, VerRange);
-        CMVClean(VerRange);
+        ProcessMVNotThreaded<Kernel, KernelHeight>(VerRange);
+        (this->*CleaningProc)(VerRange);
     }
     else{
         const size_t ThreadAmount { Decider(OperationCount) };
-        ThreadPackage& Threads = ExecuteThreadsWNJoining(ThreadAmount,
-                                                         &VMM<NumType>::ThreadInstance<VMM<NumType>::CMVKernel>, this);
+        ThreadPackage& Threads = ExecuteThreadsWNJoining(ThreadAmount,&VMM<NumType>::ThreadInstance<Kernel>, this);
 
         for (size_t i = 0; i < MatACols; i += GetVectChunkSize()){
             while(!CordQue.empty()){
                 std::this_thread::sleep_for(std::chrono::microseconds(1));
             }
-            for(size_t j = 0; j < VerRange; j += GetVertMatChunkSize()){
-                const size_t Range = std::min(VerRange, j + GetVertMatChunkSize());
-                for(size_t jj = j; jj < Range; jj += CMVKernelHeight()){
+            for(size_t j = 0; j < VerRange; j += GetResVectChunkSize()){
+                const size_t Range = std::min(VerRange, j + GetResVectChunkSize());
+                for(size_t jj = j; jj < Range; jj += KernelHeight){
                     QueGuard.lock();
                     CordQue.emplace(i, jj);
                     QueGuard.unlock();
@@ -905,15 +1022,43 @@ void VMM<NumType>::ProcessCMV() {
             }
         }
         WorkDone = true;
-        CMVClean(VerRange);
+        (this->*CleaningProc)(VerRange);
         JoinThreads(ThreadAmount, Threads);
     }
 }
 
 template<typename NumType>
-template<size_t ThreadCap, size_t (*Decider)(size_t)>
-void VMM<NumType>::ProcessRMV() {
-    ProcessVM<&VMM<NumType>::RMVKernel, RMVKernelHeight()>(MatACols, MatARows);
+template<void (VMM<NumType>::*Kernel)(size_t, size_t), void (VMM<NumType>::*CleaningProc)(size_t),
+        size_t KernelWidth, size_t ThreadCap, size_t (*Decider)(size_t)>
+void VMM<NumType>::ProcessVMThreaded() {
+    const size_t HorRange { (MatACols / KernelWidth) * KernelWidth };
+    const size_t OperationCount { MatARows * MatACols };
+
+    if (OperationCount < ThreadInfo::ThreadedStartingThreshold){
+        ProcessVMNotThreaded<Kernel, KernelWidth>(HorRange);
+        (this->*CleaningProc)(HorRange);
+    }
+    else{
+        const size_t ThreadAmount { Decider(OperationCount) };
+        ThreadPackage& Threads = ExecuteThreadsWNJoining(ThreadAmount,&VMM<NumType>::ThreadInstance<Kernel>, this);
+
+        for (size_t i = 0; i < MatARows; i += GetVectChunkSize()){
+            while(!CordQue.empty()){
+                std::this_thread::sleep_for(std::chrono::microseconds(1));
+            }
+            for(size_t j = 0; j < HorRange; j += GetResVectChunkSize()){
+                const size_t Range = std::min(HorRange, j + GetResVectChunkSize());
+                for(size_t jj = j; jj < Range; jj += KernelWidth){
+                    QueGuard.lock();
+                    CordQue.emplace(jj, i);
+                    QueGuard.unlock();
+                }
+            }
+        }
+        WorkDone = true;
+        (this->*CleaningProc)(HorRange);
+        JoinThreads(ThreadAmount, Threads);
+    }
 }
 
 #endif // PARALLELNUM_NUMERICAL_CORE_H_

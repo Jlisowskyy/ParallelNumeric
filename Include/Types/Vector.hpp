@@ -483,7 +483,8 @@ void Vector<NumType>::AllocateArray()
         // To unify allocation and algorithms,
         // all vectors like matrices are extended to sizes divisible by length of cache line
         const size_t ElementsToExtend { GetCacheLineElem<NumType>() - Size % GetCacheLineElem<NumType>() };
-        const size_t ByteSize { (Size + ElementsToExtend) * sizeof(NumType) } ;
+        const size_t ExtendedSize { Size + ElementsToExtend };
+        const size_t ByteSize { ExtendedSize * sizeof(NumType) } ;
 #ifdef OP_SYS_WIN
         Array = (NumType*)_aligned_malloc(ByteSize, CacheInfo::LineSize);
 #elif defined(OP_SYS_UNIX)
@@ -491,6 +492,9 @@ void Vector<NumType>::AllocateArray()
 #endif
         BaseAbandonIfNull(Array, ByteSize);
         SetUsage(ByteSize);
+
+        // TODO: Temporary solution
+        for (size_t j = Size; j < ExtendedSize; ++j) Array[j] = 0;
     }
     else {
         // TODO
