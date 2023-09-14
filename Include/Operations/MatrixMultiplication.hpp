@@ -49,7 +49,10 @@ class GPMM
     static constexpr size_t Dim1Part = 12240; // Size chosen for double to optimize for L3 cache
     static constexpr size_t Dim2Part = 240; // Size chosen for double to optimize for L1 cache
     static constexpr size_t Dim3Part = 1020; // Size chosen for double to optimize for L2 cache
-    static constexpr size_t HorInBlockSize = 6; // Same for all data types, because depends only on length of cache line
+    static constexpr size_t CCKernelWidth()
+    // Same for all data types, denotes the number of 'lines' to be saved on target matrix
+    { return 6; }
+    static constexpr size_t CCKernelHeight(){ return 2 * AVXInfo::GetAVXLength<NumType>(); }
 
     // Matrices parameters
     const NumType* const MatA;

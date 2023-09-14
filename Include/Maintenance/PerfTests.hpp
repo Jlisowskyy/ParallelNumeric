@@ -95,7 +95,9 @@ void PerformXXXTest(size_t OpCount, unsigned RunsToGo, long Seed = 0)
     }
 }
 
-template<bool Verbose = false, typename NumType = DefaultNumType, D3Pack(*GetDims)(size_t) = Gen3Dims>
+template<bool Verbose = false, D3Pack(*GetDims)(size_t) = Gen3Dims,
+        bool IsArg1Hor = false, bool IsArg2Hor = false, bool IsResultHor = false,
+        typename NumType = DefaultNumType>
 void PerformMMTest(size_t OpCount, unsigned RunsToGo, long Seed = 0){
     using MatT = Matrix1<NumType>;
     using MatP = std::tuple<MatT, MatT>;
@@ -112,8 +114,8 @@ void PerformMMTest(size_t OpCount, unsigned RunsToGo, long Seed = 0){
                         }
 
                         return std::make_tuple(
-                                MatT(std::get<0>(d), std::get<1>(d), Val1),
-                                MatT(std::get<1>(d), std::get<2>(d), Val2)
+                                MatT(std::get<0>(d), std::get<1>(d), Val1, IsArg1Hor),
+                                MatT(std::get<1>(d), std::get<2>(d), Val2, IsArg2Hor)
                         );
                     },
                     [](MatP& Args) -> MatT{
@@ -142,7 +144,7 @@ void PerformVectOnDataTest(size_t VectorSize, unsigned RunsToGo){
         >(VectorSize, RunsToGo);
 }
 
-template <bool Verbose = false, bool IsHor = false, typename NumType = DefaultNumType, D2Pack(*GetDims)(size_t) = Gen2Dims>
+template <bool Verbose = false, bool IsHor = false, D2Pack(*GetDims)(size_t) = Gen2Dims, typename NumType = DefaultNumType>
 void PerformOutProdTest(size_t OpCount, unsigned RunsToGo, long Seed = 0) {
     using ArgT = Vector<NumType>;
     using ArgP = std::tuple<ArgT, ArgT>;
@@ -171,7 +173,7 @@ void PerformOutProdTest(size_t OpCount, unsigned RunsToGo, long Seed = 0) {
 }
 
 template<bool Verbose = false, bool IsArgMatHor = false, bool IsVectHor = false,
-        typename NumType = DefaultNumType, D2Pack(*GetDims)(size_t) = Gen2Dims>
+        D2Pack(*GetDims)(size_t) = Gen2Dims, typename NumType = DefaultNumType>
 void PerformVectMatMultTest(size_t OperationCount, unsigned RunsToGo, long Seed = 0){
     using MatT = Matrix1<NumType>;
     using VecT= Vector<NumType>;

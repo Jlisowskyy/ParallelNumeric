@@ -60,7 +60,6 @@ class Matrix1 : public Vector<NumType>
 
 	using Vector<NumType>::Array;
 	using Vector<NumType>::IsHorizontal;
-    using Vector<NumType>::ElementsPerCacheLine;
 	using Vector<NumType>::MM;
 	// Probably used in future to synchronize resource management
 
@@ -256,6 +255,42 @@ private:
 public:
     template<typename NumT, size_t ThreadCap, size_t (*Decider)(size_t)>
     friend Matrix1<NumT> GetOuterProduct(const Vector<NumT>& A, const Vector<NumT>& B, bool HorizontalReturn);
+
+    friend Matrix1<NumType> ElemByElemMult(const Matrix1<NumType>& A, const Matrix1<NumType>& B){
+        if (A.Rows != B.Rows || A.Cols != B.Cols) [[unlikely]]{
+            throw std::runtime_error("[ERROR] Not able to perform ElemByElemMult, because Matrices have different sizes\n");
+        }
+
+        if (A.IsHorizontal != B.IsHorizontal){
+
+        }
+        else{
+            return GetArrOnArrResult<std::multiplies<NumType>>(A,B);
+        }
+    }
+
+//    Vector<NumType>& ApplyElemByElemMult(const Vector<NumType>& B){
+//        if (Size != B.Size) [[unlikely]]{
+//            throw std::runtime_error("[ERROR] Not able to perform ApplyElemByElemMult, because Vectors have different sizes\n");
+//        }
+//        ApplyArrayOnArrayOp<NumType, std::multiplies<NumType>>(Array, Array, B.Array, B.Size);
+//        return *this;
+//    }
+//
+//    friend Vector<NumType> ElemByElemDiv(const Vector<NumType>& A, const Vector<NumType>& B){
+//        if (A.Size != B.Size) [[unlikely]]{
+//            throw std::runtime_error("[ERROR] Not able to perform ElemByElemDiv, because Vectors have different sizes\n");
+//        }
+//        return GetArrOnArrResult<std::divides<NumType>>(A,B);
+//    }
+//
+//    Vector<NumType>& ApplyElemByElemDiv(const Vector<NumType>& B){
+//        if (Size != B.Size) [[unlikely]]{
+//            throw std::runtime_error("[ERROR] Not able to perform ApplyElemByElemDiv, because Vectors have different sizes\n");
+//        }
+//        ApplyArrayOnArrayOp<NumType, std::multiplies<NumType>>(Array, Array, B.Array, B.Size);
+//        return *this;
+//    }
 };
 
 // ------------------------------------
@@ -295,10 +330,10 @@ void Matrix1<NumType>::OptimizeResourceManagement()
 // Find optimal way to store the data, then prepares
 // Arrays to be used efficiently, needs variable Rows and Cols to operate
 {
-    size_t ElementsOnLastCacheLine = ElementsPerLine % ElementsPerCacheLine;
-    OffsetPerLine = ElementsOnLastCacheLine == 0 ? 0 : (ElementsPerCacheLine - ElementsOnLastCacheLine);
+    const size_t ElementsOnLastCacheLine = ElementsPerLine % GetCacheLineElem<NumType>();
+    OffsetPerLine = ElementsOnLastCacheLine == 0 ? 0 : (GetCacheLineElem<NumType>() - ElementsOnLastCacheLine);
     SizeOfLine = ElementsPerLine + OffsetPerLine;
-    size_t ExpectedAlignedSize = Lines * SizeOfLine;
+    const size_t ExpectedAlignedSize = Lines * SizeOfLine;
 
 #ifdef OPTIMISE_MEM_
     unsigned long MemoryEnlargementInBytes = OffsetPerLine * Lines * (unsigned long)sizeof(NumType);

@@ -22,7 +22,6 @@ template<typename NumType>
 class Vector: public MemUsageCollector
 {
 protected:
-    static constexpr size_t ElementsPerCacheLine = CacheInfo::LineSize / sizeof(NumType);
     size_t Size;
 	bool IsHorizontal;
 	const ResourceManager* MM;
@@ -144,10 +143,10 @@ public:
         // Transforms data with avx function
     {
         static constexpr size_t PackageSize = AVXInfo::ByteCap / sizeof(NumType);
-        const size_t Range = (Size / ElementsPerCacheLine) * ElementsPerCacheLine;
+        const size_t Range = (Size / GetCacheLineElem<NumType>()) * GetCacheLineElem<NumType>();
 
         #pragma omp parallel for
-        for (size_t i = 0; i < Range; i+= ElementsPerCacheLine) {
+        for (size_t i = 0; i < Range; i+= GetCacheLineElem<NumType>()) {
             *((AVXType*)(Array + i)) = AVXOperation(*((AVXType*)(Array + i)));
             *((AVXType*)(Array + i + PackageSize)) = AVXOperation(*((AVXType*)(Array + i + PackageSize)));
         }
@@ -367,19 +366,31 @@ public:
     }
 
     friend Vector<NumType> ElemByElemMult(const Vector<NumType>& A, const Vector<NumType>& B){
+        if (A.Size != B.Size) [[unlikely]]{
+            throw std::runtime_error("[ERROR] Not able to perform ElemByElemMult, because Vectors have different sizes\n");
+        }
         return GetArrOnArrResult<std::multiplies<NumType>>(A,B);
     }
 
     Vector<NumType>& ApplyElemByElemMult(const Vector<NumType>& B){
+        if (Size != B.Size) [[unlikely]]{
+            throw std::runtime_error("[ERROR] Not able to perform ApplyElemByElemMult, because Vectors have different sizes\n");
+        }
         ApplyArrayOnArrayOp<NumType, std::multiplies<NumType>>(Array, Array, B.Array, B.Size);
         return *this;
     }
 
     friend Vector<NumType> ElemByElemDiv(const Vector<NumType>& A, const Vector<NumType>& B){
+        if (A.Size != B.Size) [[unlikely]]{
+            throw std::runtime_error("[ERROR] Not able to perform ElemByElemDiv, because Vectors have different sizes\n");
+        }
         return GetArrOnArrResult<std::divides<NumType>>(A,B);
     }
 
     Vector<NumType>& ApplyElemByElemDiv(const Vector<NumType>& B){
+        if (Size != B.Size) [[unlikely]]{
+            throw std::runtime_error("[ERROR] Not able to perform ApplyElemByElemDiv, because Vectors have different sizes\n");
+        }
         ApplyArrayOnArrayOp<NumType, std::multiplies<NumType>>(Array, Array, B.Array, B.Size);
         return *this;
     }
@@ -482,7 +493,8 @@ void Vector<NumType>::AllocateArray()
     if (!MM) [[likely]] {
         // To unify allocation and algorithms,
         // all vectors like matrices are extended to sizes divisible by length of cache line
-        const size_t ElementsToExtend { GetCacheLineElem<NumType>() - Size % GetCacheLineElem<NumType>() };
+        const size_t ElementsOnLastCacheLine = Size % GetCacheLineElem<NumType>();
+        const size_t ElementsToExtend { ElementsOnLastCacheLine == 0 ? 0 : (GetCacheLineElem<NumType>() - ElementsOnLastCacheLine) };
         const size_t ExtendedSize { Size + ElementsToExtend };
         const size_t ByteSize { ExtendedSize * sizeof(NumType) } ;
 #ifdef OP_SYS_WIN

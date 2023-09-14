@@ -22,20 +22,20 @@
 
 // Todo replace with own thread structure or else generaly reconsider
 template<typename NumType, NumType (*BinOp)(NumType, NumType)>
-void ApplyScalarOpOnArray(NumType* const Result, const NumType* const Arg1, const NumType Scalar, const size_t ArraySize){
-    #pragma omp parallel for
-    for (size_t i = 0; i < ArraySize; ++i){
-        Result[i] = BinOp(Arg1[i], Scalar);
-    }
-}
+void ApplyScalarOpOnArray(NumType* const Result, const NumType* const Arg1, const NumType Scalar, const size_t ArraySize);
 
 template<typename NumType, NumType (*BinOp)(NumType, NumType)>
-void ApplyArrayOnArrayOp(NumType* const Result, const NumType* const Arg1, const NumType* const Arg2, const size_t ArraySize){
-    #pragma omp parallel for
-    for (size_t i = 0; i < ArraySize; ++i){
-        Result[i] = BinOp(Arg1[i], Arg2);
-    }
-}
+void ApplyArrayOnArrayOp(NumType* const Result, const NumType* const Arg1, const NumType* const Arg2, const size_t ArraySize);
+
+template<typename NumType>
+class CrossedArraysBinOpMachine{
+    const size_t Rows;
+    const size_t Cols;
+
+    
+public:
+
+};
 
 // ------------------------------------------
 // Sum of matrices functions
@@ -335,6 +335,26 @@ template<>
 void VMM<double>::CVMKernelCleaning(size_t HorizontalCord, size_t VerticalCord);
 
 #endif
+
+// ------------------------------------------
+// Vector & scalar operations Implementation
+// ------------------------------------------
+
+template<typename NumType, NumType (*BinOp)(NumType, NumType)>
+void ApplyScalarOpOnArray(NumType *const Result, const NumType *const Arg1, const NumType Scalar, const size_t ArraySize) {
+#pragma omp parallel for
+    for (size_t i = 0; i < ArraySize; ++i){
+        Result[i] = BinOp(Arg1[i], Scalar);
+    }
+}
+
+template<typename NumType, NumType (*BinOp)(NumType, NumType)>
+void ApplyArrayOnArrayOp(NumType *const Result, const NumType *const Arg1, const NumType *const Arg2, const size_t ArraySize) {
+#pragma omp parallel for
+    for (size_t i = 0; i < ArraySize; ++i) {
+        Result[i] = BinOp(Arg1[i], Arg2);
+    }
+}
 
 // ------------------------------------------
 // Matrix Sum Implementation
