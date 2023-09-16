@@ -4,3 +4,7 @@ cmake-*/
 gcc-rel/
 temp/
 asm/
+build/
+*.out
+build.sh
+Build.sh

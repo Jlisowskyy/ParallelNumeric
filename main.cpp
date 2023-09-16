@@ -2,7 +2,10 @@
 // Author: Jakub Lisowski
 
 #include <cmath>
+
+#ifdef OpSysWin_
 #include <windows.h>
+#endif
 
 #include "Include/Maintenance/Debuggers.hpp"
 #include "Include/Maintenance/PerfTests.hpp"
@@ -39,7 +42,7 @@ constexpr size_t size = 8160;
 constexpr size_t SlowingSize = 8192;
 
 int main() {
-    PerformMMTest<true, [](size_t)->D3Pack{ return std::make_tuple(SlowingSize, size, size); }>(length, 2, 4);
+    PerformMMTest<true, [](size_t)->D3Pack{ return std::make_tuple(1024, 1024, 1024); }>(length, 2, 4);
 }
 
 #elif defined DebugMatrix1

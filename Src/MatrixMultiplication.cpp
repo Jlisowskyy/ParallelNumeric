@@ -3,7 +3,9 @@
 //
 
 #include "../Include/Operations/MatrixMultiplication.hpp"
+
 #include <algorithm>
+#include <immintrin.h>
 
 template<>
 inline void GPMM<double>::CCKernelXx6(const size_t HorizontalCord, const size_t VerticalCord, const size_t Dim2Off)
