@@ -3,3 +3,5 @@
 3) Optimize Memory usage for edge cases
 4) Reconsider general calling conventions
 5) Create struturised hierarchy to clarify code structure
+6) Change w chuj nazwy zmiennych od sposobow przetrzymywania
+7) Make only one single accesing function in some wrapping

@@ -110,7 +110,7 @@ template<
         typename NumType = DefaultNumType
         >
 void PerformMMTest(size_t OpCount, unsigned RunsToGo, long Seed = 0){
-    using MatT = Matrix1<NumType>;
+    using MatT = Matrix<NumType>;
     using MatP = std::tuple<MatT, MatT>;
 
     PerformXXXTest<MatT, MatT, MatT,
@@ -168,7 +168,7 @@ template<
 void PerformOutProdTest(size_t OpCount, unsigned RunsToGo, long Seed = 0) {
     using ArgT = Vector<NumType>;
     using ArgP = std::tuple<ArgT, ArgT>;
-    using RetT = Matrix1<NumType>;
+    using RetT = Matrix<NumType>;
 
     PerformXXXTest<ArgT, ArgT, RetT,
             [](size_t OpCount) -> ArgP{
@@ -200,7 +200,7 @@ template<
         typename NumType = DefaultNumType
         >
 void PerformVectMatMultTest(size_t OperationCount, unsigned RunsToGo, long Seed = 0){
-    using MatT = Matrix1<NumType>;
+    using MatT = Matrix<NumType>;
     using VecT= Vector<NumType>;
     using ArgP = std::tuple<MatT, VecT>;
 
@@ -288,7 +288,7 @@ template<
         typename NumType = DefaultNumType
         >
 void PerformMatrixSumTest(size_t OpCount, unsigned RunsToGo){
-    using MatT = Matrix1<NumType>;
+    using MatT = Matrix<NumType>;
     using ArgP = std::tuple<MatT, MatT>;
 
     PerformXXXTest<MatT, MatT, MatT,
@@ -328,7 +328,7 @@ void PerformCroseedArrayTest(size_t OpCount, unsigned RunsToGo)
     // Crossed Array means commonly used template to efficiently perform not looped operations between at least two arrays
     // which are held in different way
 {
-    using MatT = Matrix1<NumType>;
+    using MatT = Matrix<NumType>;
     using ArgP = std::tuple<MatT, MatT>;
 
     PerformXXXTest<MatT, MatT, MatT,

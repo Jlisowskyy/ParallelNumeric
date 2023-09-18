@@ -505,6 +505,92 @@ void VMM<double>::CVMKernelCleaning(size_t HorizontalCord, size_t VerticalCord);
 #endif
 
 // ------------------------------------------
+// Matrix and Vector addition / subtraction
+// ------------------------------------------
+
+template<typename NumType>
+class MatrixVectElemByElemMachine{
+    NumType* const MatA;
+    const NumType* const VectB;
+
+    const size_t Rows;
+    const size_t Cols;
+    const size_t MatASoL;
+
+    const bool IsAHor;
+    const bool IsBHor;
+
+
+    // -------------------------------------------------
+    // DEBUGIN / COMPARISON TOOLS
+    template<
+            NumType (*BinaryOperand)(NumType, NumType),
+            size_t (*MatAccess)(size_t , size_t , size_t)
+            >
+    void SimplestSolutionHorVect(){
+        for (size_t i = 0 ; i < Rows; ++i){
+            for (size_t j = 0 ; j < Cols; ++j){
+                MatA[MatAccess(i, j, MatASoL)] = BinaryOperand(MatA[MatAccess(i, j, MatASoL)], VectB[j]);
+            }
+        }
+    }
+
+    template<
+            NumType (*BinaryOperand)(NumType, NumType),
+            size_t (*MatAccess)(size_t , size_t , size_t)
+            >
+    void SimplestSolutionVerVect(){
+        for (size_t i = 0 ; i < Cols; ++i){
+            for (size_t j = 0 ; j < Rows; ++j){
+                MatA[MatAccess(j, i, MatASoL)] = BinaryOperand(MatA[MatAccess(j, i, MatASoL)], VectB[j]);
+            }
+        }
+    }
+
+public:
+    MatrixVectElemByElemMachine(
+            NumType* MatA,
+            const NumType* VectB,
+            size_t Rows,
+            size_t Cols,
+            size_t MatASoL,
+            bool IsAHor,
+            bool IsBHor
+    );
+
+
+    template<
+            NumType (*BinaryOperand)(NumType, NumType),
+            bool Debug = true
+            >
+    void Perform(){
+        static const auto ByRowLayout = [](size_t HorCord, size_t VerCord, size_t SoL){
+            return VerCord * SoL + HorCord;
+        };
+
+        static const auto ByColLayout = [](size_t HorCord, size_t VerCord, size_t SoL){
+            return HorCord * SoL + VerCord;
+        };
+
+        if constexpr(Debug){
+
+            if (IsBHor){
+                if (IsAHor) SimplestSolutionHorVect(BinaryOperand, ByRowLayout)();
+                else SimplestSolutionHorVect(BinaryOperand, ByColLayout)();
+            }
+            else{
+                if (IsAHor) SimplestSolutionVerVect(BinaryOperand, ByRowLayout)();
+                else SimplestSolutionVerVect(BinaryOperand, ByColLayout)();
+            }
+
+        }
+        else{
+
+        }
+    };
+};
+
+// ------------------------------------------
 // Vector & scalar operations Implementation
 // ------------------------------------------
 
@@ -1335,19 +1421,19 @@ template<typename NumType, NumType (*BinOperand)(NumType, NumType)>
 void CrossedArraysBinOpMachine<NumType, BinOperand>::Perform()
     // Adapts to layout situation to ensure best performance
 {
-    auto ColIterColLayout = [](size_t ColCord, size_t RowCord, size_t SoL) -> size_t {
+    const static auto ColIterColLayout = [](size_t ColCord, size_t RowCord, size_t SoL) -> size_t {
         return ColCord * SoL + RowCord;
     };
 
-    auto ColIterRowLayout = [](size_t ColCord, size_t RowCord, size_t SoL) -> size_t {
+    const static auto ColIterRowLayout = [](size_t ColCord, size_t RowCord, size_t SoL) -> size_t {
         return RowCord * SoL + ColCord;
     };
 
-    auto RowIterColLayout = [](size_t RowCord, size_t ColCord, size_t SoL) -> size_t {
+    const static auto RowIterColLayout = [](size_t RowCord, size_t ColCord, size_t SoL) -> size_t {
         return ColCord * SoL + RowCord;
     };
 
-    auto RowIterRowLayout = [](size_t RowCord, size_t ColCord, size_t SoL) -> size_t {
+    const static auto RowIterRowLayout = [](size_t RowCord, size_t ColCord, size_t SoL) -> size_t {
         return RowCord * SoL + ColCord;
     };
 
@@ -1445,5 +1531,28 @@ void CrossedArraysBinOpMachine<NumType, BinOperand>::BlockLxLKernel(size_t HorCo
                                                          MatB[MatBAccess(i, j, MatBSoL)]
             );
 }
+
+//-------------------------------------------
+// MatrixVectElemByElemMachine implementation
+//-------------------------------------------
+
+template<typename NumType>
+MatrixVectElemByElemMachine<NumType>::MatrixVectElemByElemMachine(
+        NumType *MatA,
+        const NumType *VectB,
+        size_t Rows,
+        size_t Cols,
+        size_t MatASoL,
+        bool IsAHor,
+        bool IsBHor
+):
+        MatA{ MatA },
+        VectB{ VectB },
+        Rows{ Rows },
+        Cols{ Cols },
+        MatASoL{ MatASoL },
+        IsAHor { IsAHor },
+        IsBHor{ IsBHor }
+{}
 
 #endif // PARALLELNUM_NUMERICAL_CORE_H_

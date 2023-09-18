@@ -18,29 +18,29 @@
 
 // TODO OPISY
 template<typename NumType>
-class Matrix1;
+class Matrix;
 
 template<
         typename NumType,
         size_t ThreadCap = 20,
         size_t (*Decider)(size_t) = LogarithmicThreads<ThreadCap>
         >
-inline Matrix1<NumType> GetOuterProduct(const Vector<NumType>& A, const Vector<NumType>& B, bool HorizontalReturn = false);
+inline Matrix<NumType> GetOuterProduct(const Vector<NumType>& A, const Vector<NumType>& B, bool HorizontalReturn = false);
 
 template<typename NumT>
-inline OuterProductMachine<NumT> GetOPM(const Vector<NumT>& A, const Vector<NumT>& B, Matrix1<NumT>& C);
+inline OuterProductMachine<NumT> GetOPM(const Vector<NumT>& A, const Vector<NumT>& B, Matrix<NumT>& C);
 
 template<typename NumT>
-inline VMM<NumT> GetVMM(const Matrix1<NumT>& Mat, const Vector<NumT>& Vect, Vector<NumT>& RetVect);
+inline VMM<NumT> GetVMM(const Matrix<NumT>& Mat, const Vector<NumT>& Vect, Vector<NumT>& RetVect);
 
 template<typename NumT>
-inline MatrixSumMachine<NumT> GetMSM(const Matrix1<NumT>& MatA, const Matrix1<NumT>& MatB, Matrix1<NumT>& MatC);
+inline MatrixSumMachine<NumT> GetMSM(const Matrix<NumT>& MatA, const Matrix<NumT>& MatB, Matrix<NumT>& MatC);
 
 template<typename NumT>
-inline GPMM<NumT> GetMultMachine(const Matrix1<NumT>& A, const Matrix1<NumT>& B, const Matrix1<NumT>& C);
+inline GPMM<NumT> GetMultMachine(const Matrix<NumT>& A, const Matrix<NumT>& B, const Matrix<NumT>& C);
 
 template<typename NumType>
-class Matrix1 : public Vector<NumType>
+class Matrix : public Vector<NumType>
 {
 	//FixedSize - not expandable
 
@@ -71,8 +71,8 @@ class Matrix1 : public Vector<NumType>
 	// actual on hw size expressed by number of held NumType variables inside the array
 
 	using Vector<NumType>::CheckForIncorrectSize;
-	NumType& (Matrix1::* AccessFunc)(size_t, size_t);
-	const NumType& (Matrix1::* AccessFuncConst)(size_t, size_t) const;
+	NumType& (Matrix::* AccessFunc)(size_t, size_t);
+	const NumType& (Matrix::* AccessFuncConst)(size_t, size_t) const;
 
 	void AbandonIfVector() const {
 		if (Rows == 1 || Cols == 1) [[unlikely]] {
@@ -93,20 +93,20 @@ class Matrix1 : public Vector<NumType>
 	void MoveFromPointer(NumType *Src, size_t SrcSoL = 0);
 public:
     // Basic constructors:
-    Matrix1(
+    Matrix(
         size_t Rows,
         size_t Cols,
         bool ByRow = false,
         ResourceManager* MM = DefaultMM
     );
 
-    Matrix1(
+    Matrix(
         std::initializer_list<std::initializer_list<NumType>> Init,
         bool ByRow = false,
         ResourceManager* MM = DefaultMM
     );
 
-    Matrix1(
+    Matrix(
         size_t Rows,
         size_t Cols,
         const NumType* Init,
@@ -114,16 +114,16 @@ public:
         ResourceManager* MM = DefaultMM
     );
 
-	Matrix1(
-        const Matrix1& Target
+	Matrix(
+        const Matrix& Target
     ) noexcept;
 
-    Matrix1(
-        Matrix1&& Target
+    Matrix(
+            Matrix&& Target
     ) noexcept;
 
     // Actually delegates construction to one of the above ones
-    Matrix1(
+    Matrix(
         size_t Rows,
         size_t Cols,
         NumType InitVal,
@@ -131,20 +131,20 @@ public:
         ResourceManager* MM = DefaultMM
     );
 
-    Matrix1(
+    Matrix(
         size_t NNSize,
         bool ByRow = false,
         ResourceManager* MM = DefaultMM
     );
 
-    Matrix1(
+    Matrix(
         size_t NNSize,
         NumType InitVal,
         bool ByRow = false,
         ResourceManager* MM = DefaultMM
     );
 
-	Matrix1(
+	Matrix(
         size_t NNSize,
         const NumType* Init,
         bool ByRow = false,
@@ -194,10 +194,10 @@ public:
 	virtual bool CheckForIntegrity(NumType* Val, bool verbose) const;
 #endif // DEBUG_
 
-	Matrix1& operator=(const Matrix1& x);
-	Matrix1& operator=(Matrix1&& x) noexcept;
+	Matrix& operator=(const Matrix& x);
+	Matrix& operator=(Matrix&& x) noexcept;
 
-	friend std::ostream& operator<<(std::ostream& out, Matrix1& MyMatrix){
+	friend std::ostream& operator<<(std::ostream& out, Matrix& MyMatrix){
         size_t MaxMatrixCols = (FindConsoleWidth() - 2) / 6 > 0 ? (FindConsoleWidth() - 2) / 6 : 0;
 
         out << std::fixed << std::setprecision(3);
@@ -219,27 +219,27 @@ private:
 public:
 	// OPERATIONS ON MATRICES
 
-	Matrix1 GetTransposed() const;
+	Matrix GetTransposed() const;
 
-	const Matrix1& Transpose()
+	const Matrix& Transpose()
 		// Uses naive algorithm
 	{
 		return *this = GetTransposed(*this);
 	}
 
 private:
-    friend MatrixSumMachine<NumType> GetMSM<>(const Matrix1<NumType>& MatA, const Matrix1<NumType>& MatB, Matrix1<NumType>& MatC);
+    friend MatrixSumMachine<NumType> GetMSM<>(const Matrix<NumType>& MatA, const Matrix<NumType>& MatB, Matrix<NumType>& MatC);
 public:
     template<
             bool HorizontalReturn = false,
             size_t ThreadCap = 8,
             size_t (*Decider)(size_t) = LogarithmicThreads<ThreadCap>
     >
-	friend Matrix1 operator+(const Matrix1& A, const Matrix1& B)
+	friend Matrix operator+(const Matrix& A, const Matrix& B)
     {
         if (A.Rows != B.Rows || A.Cols != B.Cols) [[unlikely]]
             throw std::runtime_error("[ERROR] Not able to perform matrix sum, dimensions are not equal\n");
-        Matrix1<NumType> RetVal{A.Rows, A.Cols};
+        Matrix<NumType> RetVal{A.Rows, A.Cols};
 
         auto Machine = GetMSM(A, B, RetVal);
         Machine.template Perform<>();
@@ -248,17 +248,17 @@ public:
     }
 
 private:
-    friend GPMM<NumType> GetMultMachine<>(const Matrix1<NumType> &A, const Matrix1<NumType> &B, const Matrix1<NumType> &C);
+    friend GPMM<NumType> GetMultMachine<>(const Matrix<NumType> &A, const Matrix<NumType> &B, const Matrix<NumType> &C);
 public:
     template<
             size_t ThreadCap = 20,
             size_t (*Decider)(size_t) = LogarithmicThreads<ThreadCap>
             >
-	friend Matrix1 operator*(const Matrix1& A, const Matrix1& B){
+	friend Matrix operator*(const Matrix& A, const Matrix& B){
         if (A.Cols != B.Rows) [[unlikely]]
             throw std::runtime_error("[ERROR] Not able to perform matrix multiplication, wrong matrix sizes\n");
 
-        Matrix1 RetVal(A.Rows, B.Cols, (NumType)0);
+        Matrix RetVal(A.Rows, B.Cols, (NumType)0);
         GPMM<NumType> MultMachine = GetMultMachine(A,B,RetVal);
         MultMachine.template ExecuteOperation<ThreadCap, Decider>();
 
@@ -266,14 +266,14 @@ public:
     }
 
 private:
-    friend VMM<NumType> GetVMM<>(const Matrix1<NumType>& Mat, const Vector<NumType>& Vect, Vector<NumType>& RetVect);
+    friend VMM<NumType> GetVMM<>(const Matrix<NumType>& Mat, const Vector<NumType>& Vect, Vector<NumType>& RetVect);
 
 public:
     template<
             size_t ThreadCap = 20,
             size_t (*Decider)(size_t) = LogarithmicThreads<ThreadCap>
             >
-    friend Vector<NumType> operator*(const Matrix1& A, const Vector<NumType>& B){
+    friend Vector<NumType> operator*(const Matrix& A, const Vector<NumType>& B){
         if (B.GetIsHorizontal() || A.Cols != B.GetSize())[[unlikely]]
             throw std::runtime_error("[ERROR] Not able to perform Vect and Matrix multiplication due to wrong sizes or dimensions\n");
         Vector<NumType> RetVal(A.Rows, (NumType)0, false);
@@ -289,7 +289,7 @@ public:
             size_t ThreadCap = 20,
             size_t (*Decider)(size_t) = LogarithmicThreads<ThreadCap>
             >
-    friend Vector<NumType> operator*(const Vector<NumType>& A, const Matrix1& B){
+    friend Vector<NumType> operator*(const Vector<NumType>& A, const Matrix& B){
         if (!A.GetIsHorizontal() || B.Rows != A.GetSize()) [[unlikely]]
             throw std::runtime_error("[ERROR] Not able to perform Vect and Matrix multiplication due to wrong sizes or dimensions\n");
         Vector<NumType> RetVal(B.Cols, (NumType)0, true);
@@ -300,30 +300,30 @@ public:
         return RetVal;
     }
 
-    Matrix1 GetModified(void (Vector<NumType>::*func)()) const{
-        Matrix1 RetVal = *this;
+    Matrix GetModified(void (Vector<NumType>::*func)()) const{
+        Matrix RetVal = *this;
         (RetVal.*func)();
         return RetVal;
     }
 
-    Matrix1 GetModified(NumType(*func)(NumType x)) const{
-        Matrix1 RetVal = *this;
+    Matrix GetModified(NumType(*func)(NumType x)) const{
+        Matrix RetVal = *this;
         Vector<NumType>& Vect = RetVal;
 //        Vect.ApplyOnDataEffect<func>(); TODO
         return RetVal;
     }
 
 private:
-    friend OuterProductMachine<NumType> GetOPM<>(const Vector<NumType>& A, const Vector<NumType>& B, Matrix1<NumType>& C);
+    friend OuterProductMachine<NumType> GetOPM<>(const Vector<NumType>& A, const Vector<NumType>& B, Matrix<NumType>& C);
 public:
     template<
             typename NumT,
             size_t ThreadCap,
             size_t (*Decider)(size_t)
             >
-    friend Matrix1<NumT> GetOuterProduct(const Vector<NumT>& A, const Vector<NumT>& B, bool HorizontalReturn);
+    friend Matrix<NumT> GetOuterProduct(const Vector<NumT>& A, const Vector<NumT>& B, bool HorizontalReturn);
 
-    friend Matrix1<NumType> ElemByElemMult(const Matrix1<NumType>& A, const Matrix1<NumType>& B){
+    friend Matrix<NumType> ElemByElemMult(const Matrix<NumType>& A, const Matrix<NumType>& B){
         if (A.Rows != B.Rows || A.Cols != B.Cols) [[unlikely]]{
             throw std::runtime_error("[ERROR] Not able to perform ElemByElemMult, because Matrices have different sizes\n");
         }
@@ -359,6 +359,38 @@ public:
 //        ApplyArrayOnArrayOp<NumType, std::multiplies<NumType>>(Array, Array, B.Array, B.Size);
 //        return *this;
 //    }
+    template<
+            size_t ThreadCap = 20,
+            size_t (*Decider)(size_t) = LogarithmicThreads<ThreadCap>
+            >
+    friend Matrix<NumType> operator-(const Matrix<NumType>& A, const Vector<NumType>& B){
+        if (B.IsHorizontal){
+            if (A.Cols != B.Size)
+                throw std::runtime_error("[ERROR] Encountered not valid dimensions in subtraction operation: vector length is not equal to matrix columns count\n");
+
+            Matrix<NumType> RetVal(A);
+
+
+        }
+        else{
+            if (A.Rows != B.Size)
+                throw std::runtime_error("[ERROR] Encountered not valid dimensions in subtraction operation: vector length is not equal to matrix row count\n");
+
+        }
+    }
+
+    template<
+            size_t ThreadCap = 20,
+            size_t (*Decider)(size_t) = LogarithmicThreads<ThreadCap>
+            >
+    friend Matrix<NumType> operator+(const Matrix<NumType>& A, const Vector<NumType>& B){
+        if (B.IsHorizontal){
+
+        }
+        else{
+
+        }
+    }
 };
 
 // ------------------------------------
@@ -366,7 +398,7 @@ public:
 // ------------------------------------
 
 template<typename NumT>
-inline MatrixSumMachine<NumT> GetMSM(const Matrix1<NumT>& MatA, const Matrix1<NumT>& MatB, Matrix1<NumT>& MatC){
+inline MatrixSumMachine<NumT> GetMSM(const Matrix<NumT>& MatA, const Matrix<NumT>& MatB, Matrix<NumT>& MatC){
     return MatrixSumMachine<NumT>(
             MatA.Array,
             MatB.Array,
@@ -384,7 +416,7 @@ inline MatrixSumMachine<NumT> GetMSM(const Matrix1<NumT>& MatA, const Matrix1<Nu
 }
 
 template<typename NumT>
-inline OuterProductMachine<NumT> GetOPM(const Vector<NumT>& A, const Vector<NumT>& B, Matrix1<NumT>& C)
+inline OuterProductMachine<NumT> GetOPM(const Vector<NumT>& A, const Vector<NumT>& B, Matrix<NumT>& C)
 {
     return OuterProductMachine<NumT>(
             A.GetArray(),
@@ -398,7 +430,7 @@ inline OuterProductMachine<NumT> GetOPM(const Vector<NumT>& A, const Vector<NumT
 }
 
 template<typename NumT>
-VMM<NumT> GetVMM(const Matrix1<NumT> &Mat, const Vector<NumT> &Vect, Vector<NumT> &RetVect) {
+VMM<NumT> GetVMM(const Matrix<NumT> &Mat, const Vector<NumT> &Vect, Vector<NumT> &RetVect) {
     return VMM<NumT>(
             Mat.Array,
             Vect.GetArray(),
@@ -411,7 +443,7 @@ VMM<NumT> GetVMM(const Matrix1<NumT> &Mat, const Vector<NumT> &Vect, Vector<NumT
 }
 
 template<typename NumT>
-GPMM<NumT> GetMultMachine(const Matrix1<NumT> &A, const Matrix1<NumT> &B, const Matrix1<NumT> &C) {
+GPMM<NumT> GetMultMachine(const Matrix<NumT> &A, const Matrix<NumT> &B, const Matrix<NumT> &C) {
     return GPMM<NumT>(
             A.Array,
             B.Array,
@@ -433,7 +465,7 @@ GPMM<NumT> GetMultMachine(const Matrix1<NumT> &A, const Matrix1<NumT> &B, const 
 // ------------------------------------
 
 template<typename NumType>
-void Matrix1<NumType>::OptimizeResourceManagement()
+void Matrix<NumType>::OptimizeResourceManagement()
 // TODO: remove initval - perf
 // Find optimal way to store the data, then prepares
 // Arrays to be used efficiently, needs variable Rows and Cols to operate
@@ -468,25 +500,25 @@ void Matrix1<NumType>::OptimizeResourceManagement()
 }
 
 template<typename NumType>
-void Matrix1<NumType>::SetupAccess()
+void Matrix<NumType>::SetupAccess()
 // Copies corresponding dimensions to variables data alignment variables
 {
     if (IsHorizontal) {
         ElementsPerLine = Cols;
         Lines = Rows;
-        AccessFunc = &Matrix1::AccessByRow;
-        AccessFuncConst = &Matrix1::AccessByRowConst;
+        AccessFunc = &Matrix::AccessByRow;
+        AccessFuncConst = &Matrix::AccessByRowConst;
     }
     else {
         ElementsPerLine = Rows;
         Lines = Cols;
-        AccessFunc = &Matrix1::AccessByCol;
-        AccessFuncConst = &Matrix1::AccessByColConst;
+        AccessFunc = &Matrix::AccessByCol;
+        AccessFuncConst = &Matrix::AccessByColConst;
     }
 }
 
 template<typename NumType>
-Matrix1<NumType>::Matrix1(
+Matrix<NumType>::Matrix(
         size_t Rows,
         size_t Cols,
         const NumType *Init,
@@ -504,13 +536,13 @@ Matrix1<NumType>::Matrix1(
 }
 
 template<typename NumType>
-Matrix1<NumType>::Matrix1(
+Matrix<NumType>::Matrix(
         size_t NNSize,
         const NumType *Init,
         bool ByRow,
         ResourceManager *MM
 ):
-    Matrix1(
+    Matrix(
             NNSize,
             NNSize,
             Init,
@@ -519,7 +551,7 @@ Matrix1<NumType>::Matrix1(
     ) {}
 
 template<typename NumType>
-Matrix1<NumType>::Matrix1(
+Matrix<NumType>::Matrix(
         std::initializer_list<std::initializer_list<NumType>> Init,
         bool ByRow,
         ResourceManager *MM
@@ -554,8 +586,8 @@ Matrix1<NumType>::Matrix1(
 }
 
 template<typename NumType>
-Matrix1<NumType>::Matrix1(
-        Matrix1 &&Target
+Matrix<NumType>::Matrix(
+        Matrix &&Target
 ) noexcept:
         Vector<NumType>{std::move((Vector<NumType>&&)Target) },
         Rows{ Target.Rows },
@@ -569,8 +601,8 @@ Matrix1<NumType>::Matrix1(
 }
 
 template<typename NumType>
-Matrix1<NumType>::Matrix1(
-        const Matrix1 &Target
+Matrix<NumType>::Matrix(
+        const Matrix &Target
 ) noexcept:
         Vector<NumType>(Target),
         Rows{ Target.Rows },
@@ -584,14 +616,14 @@ Matrix1<NumType>::Matrix1(
 }
 
 template<typename NumType>
-Matrix1<NumType>::Matrix1(
+Matrix<NumType>::Matrix(
         size_t Rows,
         size_t Cols,
         NumType InitVal,
         bool ByRow,
         ResourceManager *MM
 ):
-          Matrix1(
+          Matrix(
               Rows,
               Cols,
               ByRow,
@@ -602,13 +634,13 @@ Matrix1<NumType>::Matrix1(
 }
 
 template<typename NumType>
-Matrix1<NumType>::Matrix1(
+Matrix<NumType>::Matrix(
         size_t NNSize,
         NumType InitVal,
         bool ByRow,
         ResourceManager *MM
 ):
-    Matrix1(
+    Matrix(
             NNSize,
             NNSize,
             InitVal,
@@ -617,7 +649,7 @@ Matrix1<NumType>::Matrix1(
     ) {}
 
 template<typename NumType>
-Matrix1<NumType>::Matrix1(
+Matrix<NumType>::Matrix(
         size_t Rows,
         size_t Cols,
         bool ByRow,
@@ -635,12 +667,12 @@ Matrix1<NumType>::Matrix1(
 }
 
 template<typename NumType>
-Matrix1<NumType>::Matrix1(
+Matrix<NumType>::Matrix(
         size_t NNSize,
         bool ByRow,
         ResourceManager *MM
 ):
-    Matrix1(
+    Matrix(
             NNSize,
             NNSize,
             ByRow,
@@ -648,7 +680,7 @@ Matrix1<NumType>::Matrix1(
     ){}
 
 template<typename NumType>
-void Matrix1<NumType>::MoveFromPointer(NumType * const Src, size_t SrcSoL)
+void Matrix<NumType>::MoveFromPointer(NumType * const Src, size_t SrcSoL)
     // Data from source has to be laid out in the same way as dst matrix is (by cols or by rows)
     // SrcSoL = 0 means there is no alignment done on it and function assumes its equal to matrix elements per line
 {
@@ -661,7 +693,7 @@ void Matrix1<NumType>::MoveFromPointer(NumType * const Src, size_t SrcSoL)
 }
 
 template<typename NumType>
-Matrix1<NumType> &Matrix1<NumType>::operator=(const Matrix1 &x) {
+Matrix<NumType> &Matrix<NumType>::operator=(const Matrix &x) {
     if (this == &x) [[unlikely]] return *this;
 
     Rows = x.Rows;
@@ -678,7 +710,7 @@ Matrix1<NumType> &Matrix1<NumType>::operator=(const Matrix1 &x) {
 }
 
 template<typename NumType>
-Matrix1<NumType> &Matrix1<NumType>::operator=(Matrix1 &&x) noexcept {
+Matrix<NumType> &Matrix<NumType>::operator=(Matrix &&x) noexcept {
     Vector<NumType>::DeallocateArray();
 
     Rows = x.Rows;
@@ -704,7 +736,7 @@ Matrix1<NumType> &Matrix1<NumType>::operator=(Matrix1 &&x) noexcept {
 #ifdef DEBUG_
 
 template<typename NumType>
-bool Matrix1<NumType>::CheckForIntegrity(NumType *Val, bool verbose) const
+bool Matrix<NumType>::CheckForIntegrity(NumType *Val, bool verbose) const
     // !!!Passed data must be identically aligned to Array member data
 {
     for (size_t i = 0; i < Lines; ++i)
@@ -721,7 +753,7 @@ bool Matrix1<NumType>::CheckForIntegrity(NumType *Val, bool verbose) const
 }
 
 template<typename NumType>
-bool Matrix1<NumType>::CheckForIntegrity(NumType Val, bool verbose) const {
+bool Matrix<NumType>::CheckForIntegrity(NumType Val, bool verbose) const {
     for (size_t i = 0; i < Lines; ++i)
         for (size_t j = 0; j < ElementsPerLine; ++j)
             if (Array[i * SizeOfLine + j] != Val) [[unlikely]] {
@@ -741,7 +773,7 @@ bool Matrix1<NumType>::CheckForIntegrity(NumType Val, bool verbose) const {
 // ------------------------------------
 
 template<typename NumType>
-void Matrix1<NumType>::PrintWhole(std::ostream &out) {
+void Matrix<NumType>::PrintWhole(std::ostream &out) {
     for (size_t i = 0; i < Rows; ++i) {
         for (size_t j = 0; j < Cols; ++j)
             out << std::setw(5) << operator()(i, j) << ' ';
@@ -750,7 +782,7 @@ void Matrix1<NumType>::PrintWhole(std::ostream &out) {
 }
 
 template<typename NumType>
-void Matrix1<NumType>::PrintPartitioned(std::ostream &out, size_t MaxMatrixCols) {
+void Matrix<NumType>::PrintPartitioned(std::ostream &out, size_t MaxMatrixCols) {
     // TODO: Humanity level crime
     size_t RowParts = Rows / 5;
     size_t ColParts = Cols / MaxMatrixCols;
@@ -786,10 +818,10 @@ void Matrix1<NumType>::PrintPartitioned(std::ostream &out, size_t MaxMatrixCols)
 }
 
 template<typename NumType>
-Matrix1<NumType> Matrix1<NumType>::GetTransposed() const
+Matrix<NumType> Matrix<NumType>::GetTransposed() const
     // Get a transposed copy of this matrix, actually naive slow algorithm
 {
-    Matrix1<NumType> RetVal(Cols, Rows, IsHorizontal, MM);
+    Matrix<NumType> RetVal(Cols, Rows, IsHorizontal, MM);
 
     TransposeMatrixRowStored(RetVal.Array, Array, Lines, ElementsPerLine, RetVal.SizeOfLine, SizeOfLine);
 
@@ -797,12 +829,12 @@ Matrix1<NumType> Matrix1<NumType>::GetTransposed() const
 }
 
 template<typename NumT, size_t ThreadCap, size_t (*Decider)(size_t)>
-Matrix1<NumT> GetOuterProduct(const Vector<NumT>& A, const Vector<NumT>& B, bool HorizontalReturn){
+Matrix<NumT> GetOuterProduct(const Vector<NumT>& A, const Vector<NumT>& B, bool HorizontalReturn){
     if (A.GetIsHorizontal() || !B.GetIsHorizontal()){
         throw std::runtime_error("[ERROR] Dimensions of passed vector does not allow to perform OuterProduct\n");
     }
 
-    Matrix1<NumT> RetVal(A.GetSize(), B.GetSize(), HorizontalReturn);
+    Matrix<NumT> RetVal(A.GetSize(), B.GetSize(), HorizontalReturn);
     auto Machine = GetOPM(A, B, RetVal);
 
     Machine.template Perform<ThreadCap, Decider>();
