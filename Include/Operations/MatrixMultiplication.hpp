@@ -22,7 +22,10 @@ template<typename NumType>
 class GPMM;
 
 template<typename NumType>
-void ThreadInstance(GPMM<NumType>* Target, void (GPMM<NumType>::*Oper)(size_t, size_t, size_t));
+void ThreadInstance(
+        GPMM<NumType>* Target,
+        void (GPMM<NumType>::*Oper)(size_t, size_t, size_t)
+);
 
 template<typename NumType>
 class GPMM
@@ -67,12 +70,25 @@ class GPMM
     std::mutex QueGuard;
     std::unique_ptr<std::latch> StartGuard;
 public:
-    GPMM(const NumType* MatAData, const NumType* MatBData, NumType* MatCData,
-         size_t Dim1, size_t Dim2, size_t Dim3,
-         size_t MatASizeOfLine, size_t MatBSizeOfLine, size_t MatCSizeOfLine,
-         bool IsAHorizontal, bool IsBHorizontal, bool IsCHorizontal);
+    GPMM(
+        const NumType* MatAData,
+        const NumType* MatBData,
+        NumType* MatCData,
+        size_t Dim1,
+        size_t Dim2,
+        size_t Dim3,
+        size_t MatASizeOfLine,
+        size_t MatBSizeOfLine,
+        size_t MatCSizeOfLine,
+        bool IsAHorizontal,
+        bool IsBHorizontal,
+        bool IsCHorizontal
+    );
 
-    template<size_t ThreadCap = 20, size_t (*Decider)(size_t) = LogarithmicThreads<ThreadCap>>
+    template<
+            size_t ThreadCap = 20,
+            size_t (*Decider)(size_t) = LogarithmicThreads<ThreadCap>
+            >
     void ExecuteOperation(){
         cull OpCount = Dim1 * Dim2 * Dim3;
         cun ThreadCount = Decider(OpCount);
@@ -141,13 +157,32 @@ void ThreadInstance(GPMM<NumType>* Target, void (GPMM<NumType>::*Oper)(size_t, s
 }
 
 template<typename NumType>
-GPMM<NumType>::GPMM(const NumType *MatAData, const NumType *MatBData, NumType *MatCData, size_t Dim1,
-                    size_t Dim2, size_t Dim3, size_t MatASizeOfLine, size_t MatBSizeOfLine,
-                    size_t MatCSizeOfLine, bool IsAHorizontal, bool IsBHorizontal, bool IsCHorizontal):
-        MatA { MatAData }, MatB{ MatBData }, MatC{ MatCData }, Dim1{ Dim1 }, Dim2{ Dim2 }, Dim3{ Dim3 },
-        MatASoL{ MatASizeOfLine }, MatBSoL{ MatBSizeOfLine }, MatCSoL { MatCSizeOfLine }
+GPMM<NumType>::GPMM(
+        const NumType *MatAData,
+        const NumType *MatBData,
+        NumType *MatCData,
+        size_t Dim1,
+        size_t Dim2,
+        size_t Dim3,
+        size_t MatASizeOfLine,
+        size_t MatBSizeOfLine,
+        size_t MatCSizeOfLine,
+        bool IsAHorizontal,
+        bool IsBHorizontal,
+        bool IsCHorizontal
+):
+        MatA { MatAData },
+        MatB{ MatBData },
+        MatC{ MatCData },
+        Dim1{ Dim1 },
+        Dim2{ Dim2 },
+        Dim3{ Dim3 },
+        MatASoL{ MatASizeOfLine },
+        MatBSoL{ MatBSizeOfLine },
+        MatCSoL { MatCSizeOfLine }
     // Decides which approach is the most optimal for this current case
 {
+
 }
 
 #endif //PARALLELNUM_MATRIXMULTIPLICATION_HPP

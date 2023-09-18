@@ -2,3 +2,4 @@
 2) Optimize threading for worst cases ( There are some possible in: Sum / Inner Prod)
 3) Optimize Memory usage for edge cases
 4) Reconsider general calling conventions
+5) Create struturised hierarchy to clarify code structure

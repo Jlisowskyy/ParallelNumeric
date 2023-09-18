@@ -21,20 +21,119 @@
 // ------------------------------------------
 
 // Todo replace with own thread structure or else generaly reconsider
-template<typename NumType, NumType (*BinOp)(NumType, NumType)>
-void ApplyScalarOpOnArray(NumType* const Result, const NumType* const Arg1, const NumType Scalar, const size_t ArraySize);
+template<
+        typename NumType,
+        NumType (*BinOp)(NumType, NumType)
+        >
+void ApplyScalarOpOnArray(
+        NumType* Result,
+        const NumType* Arg1,
+        NumType Scalar,
+        size_t ArraySize
+);
 
-template<typename NumType, NumType (*BinOp)(NumType, NumType)>
-void ApplyArrayOnArrayOp(NumType* const Result, const NumType* const Arg1, const NumType* const Arg2, const size_t ArraySize);
+template<
+        typename NumType,
+        NumType (*BinOp)(NumType, NumType)
+        >
+void ApplyArrayOnArrayOp(
+        NumType* Result,
+        const NumType* Arg1,
+        const NumType* Arg2,
+        size_t ArraySize
+);
 
-template<typename NumType>
+
+// TODO: reconsider thing below again check if 2 aligned arrays changes anything etc
+// TODO: reconsider using if statements inside loops again
+
+template<
+        typename NumType,
+        NumType(*BinOperand)(NumType, NumType)
+        >
 class CrossedArraysBinOpMachine{
+    const NumType* const MatA;
+    const NumType* const MatB;
+    NumType* const MatC;
+
     const size_t Rows;
     const size_t Cols;
+    const size_t MatASoL;
+    const size_t MatBSoL;
+    const size_t MatCSoL; // <-- Target matrix
 
-    
+    bool IsAHor, IsBHor, IsCHor;
+
+    // Threaded components
+
+    // Range inline checkers
+    inline size_t GetVerRange(size_t Cord){
+        return std::min(Rows, Cord + GetCacheLineElem<NumType>());
+    }
+
+    inline size_t GetHorRange(size_t Cord){
+        return std::min(Cols, Cord + GetCacheLineElem<NumType>());
+    }
+
+    enum class LayoutPossibilities
+        // XXX names denotes layout types of corresponding A, B, C matrices,
+    {
+        ColColCol,
+        ColRowCol,
+        RowColCol,
+        RowRowCol,
+        ColColRow,
+        ColRowRow,
+        RowColRow,
+        RowRowRow,
+    };
+
 public:
+    CrossedArraysBinOpMachine(
+            const NumType* MatA,
+            const NumType* MatB,
+            NumType* MatC,
+            size_t Rows,
+            size_t Cols,
+            size_t MatASoL,
+            size_t MatBSoL,
+            size_t MatCSoL,
+            bool IsAHor,
+            bool IsBHor,
+            bool IsCHor
+    ):
+            MatA{ MatA },
+            MatB{ MatB },
+            MatC{ MatC },
+            Rows{ Rows },
+            Cols{ Cols },
+            MatASoL{ MatASoL },
+            MatBSoL{ MatBSoL },
+            MatCSoL{ MatCSoL },
+            IsAHor{ IsAHor },
+            IsBHor{ IsBHor },
+            IsCHor{ IsCHor }
+    {}
 
+
+    template<
+             bool FirstIterCols,
+             size_t (*MatAAccess)(size_t, size_t, size_t),
+             size_t (*MatBAccess)(size_t, size_t, size_t),
+             size_t (*MatCAccess)(size_t, size_t, size_t)
+             >
+    void BlockLxLKernel(size_t HorCord, size_t VerCord);
+
+    template<
+             bool FirstIterCols,
+             size_t (*MatAAccess)(size_t, size_t, size_t),
+             size_t (*MatBAccess)(size_t, size_t, size_t),
+             size_t (*MatCAccess)(size_t, size_t, size_t)
+             >
+    void ExecuteOperation();
+
+    void Perform();
+    
 };
 
 // ------------------------------------------
@@ -80,10 +179,25 @@ class MatrixSumMachine{
 
     inline void UnalignedArraysMatchingFunctions(bool IsAHor, bool IsBHor, bool IsCHor);
 public:
-    MatrixSumMachine(const NumType* MatA, const NumType* MatB, NumType* MatC, size_t Rows, size_t Cols, size_t Size,
-                     size_t MatASoL, size_t MatBSoL, size_t MatCSoL, bool IsAHor, bool IsBHor, bool IsCHor);
+    MatrixSumMachine(
+            const NumType* MatA,
+            const NumType* MatB,
+            NumType* MatC,
+            size_t Rows,
+            size_t Cols,
+            size_t Size,
+            size_t MatASoL,
+            size_t MatBSoL,
+            size_t MatCSoL,
+            bool IsAHor,
+            bool IsBHor,
+            bool IsCHor
+    );
 
-    template<size_t ThreadCap = 20, size_t (*Decider)(size_t) = LogarithmicThreads<ThreadCap>>
+    template<
+            size_t ThreadCap = 20,
+            size_t (*Decider)(size_t) = LogarithmicThreads<ThreadCap>
+            >
     inline void Perform();
 };
 
@@ -103,8 +217,14 @@ void MatrixSumMachine<float>::AlignedArrays(size_t Begin, size_t End);
 
 // Naive solution
 template<typename NumType>
-void TransposeMatrixRowStored(NumType* Dst, NumType* Src, size_t SrcLines, size_t SrcElementsPerLine,
-                              size_t DstSizeOfLine, size_t SrcSizeOfLine);
+void TransposeMatrixRowStored(
+        NumType* Dst,
+        NumType* Src,
+        size_t SrcLines,
+        size_t SrcElementsPerLine,
+        size_t DstSizeOfLine,
+        size_t SrcSizeOfLine
+);
 
 // ------------------------------------------
 // Dot product code
@@ -135,10 +255,20 @@ class DotProductMachine{
     inline NumType DotProductCleaning(size_t BeginOfCleaning);
     inline NumType DotProduct();
 public:
-    DotProductMachine(const NumType* const APtr, const NumType* const BPtr, const size_t Size):
-        APtr{ APtr }, BPtr{ BPtr }, Size{ Size } {}
+    DotProductMachine(
+            const NumType* const APtr,
+            const NumType* const BPtr,
+            const size_t Size
+    ):
+            APtr{ APtr },
+            BPtr{ BPtr },
+            Size{ Size }
+    {}
 
-    template<size_t ThreadCap = 8, size_t (*Decider)(size_t) = LogarithmicThreads<ThreadCap>>
+    template<
+            size_t ThreadCap = 8,
+            size_t (*Decider)(size_t) = LogarithmicThreads<ThreadCap>
+            >
     inline NumType Perform();
 };
 
@@ -181,10 +311,20 @@ class OuterProductMachine
     void ThreadInstance(size_t ThreadID);
 
 public:
-    OuterProductMachine(const NumType* VectA, const NumType* VectB, NumType* MatC, size_t ASize,
-                        size_t BSize, size_t MatCSoL, bool IsHor = false);
+    OuterProductMachine(
+            const NumType* VectA,
+            const NumType* VectB,
+            NumType* MatC,
+            size_t ASize,
+            size_t BSize,
+            size_t MatCSoL,
+            bool IsHor = false
+    );
 
-    template<size_t ThreadCap = 20, size_t (*Decider)(size_t) = LogarithmicThreads<ThreadCap>>
+    template<
+            size_t ThreadCap = 20,
+            size_t (*Decider)(size_t) = LogarithmicThreads<ThreadCap>
+            >
     inline void Perform();
 };
 
@@ -252,20 +392,34 @@ class VMM{
     template<void (VMM<NumType>::*Kernel)(size_t, size_t)>
     void ThreadInstance();
 
-    template<void (VMM<NumType>::*Kernel)(size_t, size_t), size_t KernelHeight>
+    template<
+            void (VMM<NumType>::*Kernel)(size_t, size_t),
+            size_t KernelHeight
+            >
     void ProcessMVNotThreaded(size_t VerticalRange);
 
-    template<void (VMM<NumType>::*Kernel)(size_t, size_t), size_t KernelWidth>
+    template<
+            void (VMM<NumType>::*Kernel)(size_t, size_t),
+            size_t KernelWidth
+            >
     void ProcessVMNotThreaded(size_t HorizontalRange);
 
-    template<void (VMM<NumType>::*Kernel)(size_t, size_t),
-            void (VMM<NumType>::*CleaningProc)(size_t), size_t KernelHeight,
-            size_t ThreadCap, size_t (*Decider)(size_t)>
+    template<
+            void (VMM<NumType>::*Kernel)(size_t, size_t),
+            void (VMM<NumType>::*CleaningProc)(size_t),
+            size_t KernelHeight,
+            size_t ThreadCap,
+            size_t (*Decider)(size_t)
+            >
     void ProcessMVThreaded();
 
-    template<void (VMM<NumType>::*Kernel)(size_t, size_t),
-            void (VMM<NumType>::*CleaningProc)(size_t), size_t KernelHeight,
-            size_t ThreadCap, size_t (*Decider)(size_t)>
+    template<
+            void (VMM<NumType>::*Kernel)(size_t, size_t),
+            void (VMM<NumType>::*CleaningProc)(size_t),
+            size_t KernelHeight,
+            size_t ThreadCap,
+            size_t (*Decider)(size_t)
+            >
     void ProcessVMThreaded();
 
 
@@ -279,15 +433,29 @@ class VMM{
     }
 
 public:
-    VMM(const NumType* MatA, const NumType* VectB, NumType* VectC, size_t MatARows, size_t MatACols, size_t MatASoL, bool IsHor);
+    VMM(
+        const NumType* MatA,
+        const NumType* VectB,
+        NumType* VectC,
+        size_t MatARows,
+        size_t MatACols,
+        size_t MatASoL,
+        bool IsHor
+    );
 
-    template<size_t ThreadCap, size_t (*Decider)(size_t)>
+    template<
+            size_t ThreadCap,
+            size_t (*Decider)(size_t)
+            >
     void PerformVM(){
         if (IsMatHor) ProcessVMThreaded<&VMM<NumType>::RVMKernel, &VMM<NumType>::RVMClean, RVMKernelWidth(), ThreadCap, Decider>();
         else ProcessVMThreaded<&VMM<NumType>::CVMKernel, &VMM<NumType>::CVMClean, CVMKernelWidth(), ThreadCap, Decider>();
     }
 
-    template<size_t ThreadCap, size_t (*Decider)(size_t)>
+    template<
+            size_t ThreadCap,
+            size_t (*Decider)(size_t)
+            >
     void PerformMV(){
         if (IsMatHor) ProcessMVThreaded<&VMM<NumType>::RMVKernel, &VMM<NumType>::RMVClean, RMVKernelHeight(), ThreadCap, Decider>();
         else ProcessMVThreaded<&VMM<NumType>::CMVKernel, &VMM<NumType>::CMVClean, CMVKernelHeight(), ThreadCap, Decider>();
@@ -340,17 +508,35 @@ void VMM<double>::CVMKernelCleaning(size_t HorizontalCord, size_t VerticalCord);
 // Vector & scalar operations Implementation
 // ------------------------------------------
 
-template<typename NumType, NumType (*BinOp)(NumType, NumType)>
-void ApplyScalarOpOnArray(NumType *const Result, const NumType *const Arg1, const NumType Scalar, const size_t ArraySize) {
-#pragma omp parallel for
+template<
+        typename NumType,
+        NumType (*BinOp)(NumType, NumType)
+        >
+void ApplyScalarOpOnArray(
+        NumType *const Result,
+        const NumType *const Arg1,
+        const NumType Scalar,
+        const size_t ArraySize
+        )
+{
+    #pragma omp parallel for
     for (size_t i = 0; i < ArraySize; ++i){
         Result[i] = BinOp(Arg1[i], Scalar);
     }
 }
 
-template<typename NumType, NumType (*BinOp)(NumType, NumType)>
-void ApplyArrayOnArrayOp(NumType *const Result, const NumType *const Arg1, const NumType *const Arg2, const size_t ArraySize) {
-#pragma omp parallel for
+template<
+        typename NumType,
+        NumType (*BinOp)(NumType, NumType)
+        >
+void ApplyArrayOnArrayOp(
+        NumType *const Result,
+        const NumType *const Arg1,
+        const NumType *const Arg2,
+        const size_t ArraySize
+        )
+{
+    #pragma omp parallel for
     for (size_t i = 0; i < ArraySize; ++i) {
         Result[i] = BinOp(Arg1[i], Arg2);
     }
@@ -360,7 +546,7 @@ void ApplyArrayOnArrayOp(NumType *const Result, const NumType *const Arg1, const
 // Matrix Sum Implementation
 // ------------------------------------------
 
-
+// TODO: unused arguments???
 template<typename NumType>
 void MatrixSumMachine<NumType>::UnalignedArraysMatchingFunctions(bool IsAHor, bool IsBHor, bool IsCHor) {
     static constexpr size_t InequalityThreshold = 50;
@@ -393,11 +579,29 @@ void MatrixSumMachine<NumType>::UnalignedArraysMatchingFunctions(bool IsAHor, bo
 }
 
 template<typename NumType>
-MatrixSumMachine<NumType>::MatrixSumMachine(const NumType * const MatA, const NumType * const MatB, NumType * const MatC,
-                                            const size_t Rows, const size_t Cols, const size_t Size, const size_t MatASoL,
-                                            const size_t MatBSoL, size_t MatCSoL, const bool IsAHor, const bool IsBHor, const bool IsCHor):
-        MatA{ MatA }, MatB{ MatB }, MatC{ MatC }, Rows{ Rows }, Cols{ Cols },  MatASoL { MatASoL }, MatBSoL{ MatBSoL },
-        MatCSoL{ MatCSoL }, Size { Size }
+MatrixSumMachine<NumType>::MatrixSumMachine(
+        const NumType* const MatA,
+        const NumType * const MatB,
+        NumType * const MatC,
+        const size_t Rows,
+        const size_t Cols,
+        const size_t Size,
+        const size_t MatASoL,
+        const size_t MatBSoL,
+        const size_t MatCSoL,
+        const bool IsAHor,
+        const bool IsBHor,
+        const bool IsCHor
+):
+        MatA{ MatA },
+        MatB{ MatB },
+        MatC{ MatC },
+        Rows{ Rows },
+        Cols{ Cols },
+        MatASoL { MatASoL },
+        MatBSoL{ MatBSoL },
+        MatCSoL{ MatCSoL },
+        Size { Size }
 {
     if (IsAHor != IsBHor){
         UnalignedArraysMatchingFunctions(IsAHor, IsBHor, IsCHor);
@@ -410,7 +614,10 @@ MatrixSumMachine<NumType>::MatrixSumMachine(const NumType * const MatA, const Nu
 }
 
 template<typename NumType>
-template<size_t ThreadCap, size_t (*Decider)(size_t)>
+template<
+        size_t ThreadCap,
+        size_t (*Decider)(size_t)
+        >
 void MatrixSumMachine<NumType>::Perform() {
     if (Size < ThreadInfo::ThreadedStartingThreshold){
         const size_t Range = (DimToDivide / GetCacheLineElem<NumType>()) * GetCacheLineElem<NumType>();
@@ -634,9 +841,14 @@ void MatrixSumMachine<NumType>::CRBlockedByRowsFrame(size_t StartRow) {
 // ------------------------------------------
 
 template<typename NumType>
-void
-TransposeMatrixRowStored(NumType *Dst, NumType *Src, const size_t SrcLines, const size_t SrcElementsPerLine,
-                         const size_t DstSizeOfLine, const size_t SrcSizeOfLine) {
+void TransposeMatrixRowStored(
+        NumType *Dst,
+        NumType *Src,
+        const size_t SrcLines,
+        const size_t SrcElementsPerLine,
+        const size_t DstSizeOfLine,
+        const size_t SrcSizeOfLine)
+{
     for (size_t i = 0; i < SrcLines; ++i) {
         for (size_t j = 0; j < SrcElementsPerLine; ++j) {
             Dst[j * DstSizeOfLine + i] = Src[i * SrcSizeOfLine + j];
@@ -689,7 +901,10 @@ void DotProductMachine<NumType>::ThreadInstance(size_t ThreadID, NumType* Return
 }
 
 template<typename NumType>
-template<size_t ThreadCap, size_t (*Decider)(size_t)>
+template<
+        size_t ThreadCap,
+        size_t (*Decider)(size_t)
+        >
 NumType DotProductMachine<NumType>::Perform() {
     if (Size < ThreadInfo::ThreadedStartingThreshold) {
         return DotProduct();
@@ -780,7 +995,10 @@ void OuterProductMachine<NumType>::ThreadInstance(size_t ThreadID) {
 }
 
 template<typename NumType>
-template<size_t ThreadCap, size_t (*Decider)(size_t)>
+template<
+        size_t ThreadCap,
+        size_t (*Decider)(size_t)
+        >
 void OuterProductMachine<NumType>::Perform() {
     const size_t OperationCount { VectSize * CoefSize };
 
@@ -807,10 +1025,22 @@ void OuterProductMachine<NumType>::Perform() {
 // ------------------------------------------
 
 template<typename NumType>
-VMM<NumType>::VMM(const NumType *MatA, const NumType *VectB, NumType *VectC, size_t MatARows, size_t MatACols,
-                  size_t MatASoL, bool IsHor) :
-    MatA{ MatA }, VectB{ VectB }, VectC { VectC }, MatARows{ MatARows }, MatACols { MatACols },
-    MatASoL{ MatASoL }, IsMatHor { IsHor }
+VMM<NumType>::VMM(
+        const NumType *MatA,
+        const NumType *VectB,
+        NumType *VectC,
+        size_t MatARows,
+        size_t MatACols,
+        size_t MatASoL,
+        bool IsHor
+):
+        MatA{ MatA },
+        VectB{ VectB },
+        VectC { VectC },
+        MatARows{ MatARows },
+        MatACols { MatACols },
+        MatASoL{ MatASoL },
+        IsMatHor { IsHor }
 {
 
 }
@@ -987,7 +1217,10 @@ void VMM<NumType>::ThreadInstance() {
 }
 
 template<typename NumType>
-template<void (VMM<NumType>::*Kernel)(size_t, size_t), size_t KernelHeight>
+template<
+        void (VMM<NumType>::*Kernel)(size_t, size_t),
+        size_t KernelHeight
+        >
 void VMM<NumType>::ProcessMVNotThreaded(size_t VerticalRange) {
     for (size_t i = 0; i < MatACols; i += GetVectChunkSize()){
         for(size_t j = 0; j < VerticalRange; j += GetResVectChunkSize()){
@@ -1000,7 +1233,10 @@ void VMM<NumType>::ProcessMVNotThreaded(size_t VerticalRange) {
 }
 
 template<typename NumType>
-template<void (VMM<NumType>::*Kernel)(size_t, size_t), size_t KernelWidth>
+template<
+        void (VMM<NumType>::*Kernel)(size_t, size_t),
+        size_t KernelWidth
+        >
 void VMM<NumType>::ProcessVMNotThreaded(size_t HorizontalRange) {
     for (size_t i = 0; i < MatARows; i += GetVectChunkSize()){
         for(size_t j = 0; j < HorizontalRange; j += GetResVectChunkSize()){
@@ -1014,8 +1250,13 @@ void VMM<NumType>::ProcessVMNotThreaded(size_t HorizontalRange) {
 
 // TODO: THERE IS ULTRA RARE THREAD RACE DO IT WITH COND VARIABLES INSTEAD OF SLEEP
 template<typename NumType>
-template<void (VMM<NumType>::*Kernel)(size_t, size_t), void (VMM<NumType>::*CleaningProc)(size_t),
-        size_t KernelHeight, size_t ThreadCap, size_t (*Decider)(size_t)>
+template<
+        void (VMM<NumType>::*Kernel)(size_t, size_t),
+        void (VMM<NumType>::*CleaningProc)(size_t),
+        size_t KernelHeight,
+        size_t ThreadCap,
+        size_t (*Decider)(size_t)
+        >
 void VMM<NumType>::ProcessMVThreaded() {
     const size_t VerRange { (MatARows / KernelHeight) * KernelHeight };
     const size_t OperationCount { MatARows * MatACols };
@@ -1048,8 +1289,13 @@ void VMM<NumType>::ProcessMVThreaded() {
 }
 
 template<typename NumType>
-template<void (VMM<NumType>::*Kernel)(size_t, size_t), void (VMM<NumType>::*CleaningProc)(size_t),
-        size_t KernelWidth, size_t ThreadCap, size_t (*Decider)(size_t)>
+template<
+        void (VMM<NumType>::*Kernel)(size_t, size_t),
+        void (VMM<NumType>::*CleaningProc)(size_t),
+        size_t KernelWidth,
+        size_t ThreadCap,
+        size_t (*Decider)(size_t)
+        >
 void VMM<NumType>::ProcessVMThreaded() {
     const size_t HorRange { (MatACols / KernelWidth) * KernelWidth };
     const size_t OperationCount { MatARows * MatACols };
@@ -1079,6 +1325,125 @@ void VMM<NumType>::ProcessVMThreaded() {
         (this->*CleaningProc)(HorRange);
         JoinThreads(ThreadAmount, Threads);
     }
+}
+
+//----------------------------------------------
+// Crossed arrays implementation
+//----------------------------------------------
+
+template<typename NumType, NumType (*BinOperand)(NumType, NumType)>
+void CrossedArraysBinOpMachine<NumType, BinOperand>::Perform()
+    // Adapts to layout situation to ensure best performance
+{
+    auto ColIterColLayout = [](size_t ColCord, size_t RowCord, size_t SoL) -> size_t {
+        return ColCord * SoL + RowCord;
+    };
+
+    auto ColIterRowLayout = [](size_t ColCord, size_t RowCord, size_t SoL) -> size_t {
+        return RowCord * SoL + ColCord;
+    };
+
+    auto RowIterColLayout = [](size_t RowCord, size_t ColCord, size_t SoL) -> size_t {
+        return ColCord * SoL + RowCord;
+    };
+
+    auto RowIterRowLayout = [](size_t RowCord, size_t ColCord, size_t SoL) -> size_t {
+        return RowCord * SoL + ColCord;
+    };
+
+    switch (IsCHor * 4 + IsAHor * 2 + IsBHor) {
+        case LayoutPossibilities::ColColCol:
+            ApplyArrayOnArrayOp<NumType, BinOperand>(MatC, MatA, MatB, Cols * MatASoL);
+            return;
+        case LayoutPossibilities::ColRowCol:
+            ExecuteOperation<true, ColIterColLayout, ColIterRowLayout, ColIterColLayout>();
+            return;
+        case LayoutPossibilities::RowColCol:
+            ExecuteOperation<true, ColIterRowLayout, ColIterColLayout, ColIterColLayout>();
+            return;
+        case LayoutPossibilities::RowRowCol:
+            ExecuteOperation<false, RowIterRowLayout, RowIterRowLayout, RowIterColLayout>();
+            return;
+        case LayoutPossibilities::ColColRow:
+            ExecuteOperation<true, ColIterColLayout, ColIterColLayout, ColIterRowLayout>();
+            return;
+        case LayoutPossibilities::RowColRow:
+            ExecuteOperation<false, RowIterRowLayout, RowIterColLayout, RowIterRowLayout>();
+            return;
+        case LayoutPossibilities::ColRowRow:
+            ExecuteOperation<false, RowIterColLayout, RowIterRowLayout, RowIterRowLayout>();
+            return;
+        case LayoutPossibilities::RowRowRow:
+            ApplyArrayOnArrayOp<NumType, BinOperand>(MatC, MatA, MatB, Rows * MatASoL);
+            return;
+    }
+}
+
+template<
+        typename NumType,
+        NumType (*BinOperand)(NumType, NumType)>
+template<
+        bool FirstIterCols,
+        size_t (*MatAAccess)(size_t, size_t, size_t),
+        size_t (*MatBAccess)(size_t, size_t, size_t),
+        size_t (*MatCAccess)(size_t, size_t, size_t)
+        >
+void CrossedArraysBinOpMachine<NumType, BinOperand>::ExecuteOperation()
+// !!!WARNING!!! FirstIterCols changes access function argument order !!!
+// FirstIterCols -> if true means kernel will iterate through columns one by one,
+// otherwise computation will go row by row.
+//
+// !!!WARNING!!! FirstIterCols changes access function argument order !!!
+// First argument to access function is always first iterator, next is second iterator and last one is SoL
+{
+//        const size_t HorizontalRange{ ( Cols / GetCacheLineElem<NumType>()) * GetCacheLineElem<NumType>() };
+//        const size_t VerticalRange{ ( Rows / GetCacheLine<NumType>() ) * GetCacheLineElem<NumType>() };
+    const auto [ FirstIterRange, SecondIterRange ] = [&](){
+        if constexpr(FirstIterCols) return std::make_tuple(Cols, Rows);
+        else return std::make_tuple(Rows, Cols);
+    }();
+
+
+    for (size_t i = 0; i < FirstIterRange; i += GetCacheLineElem<NumType>() ){
+        for (size_t j = 0; j < SecondIterRange; j += GetCacheLineElem<NumType>() ){
+            BlockLxLKernel<FirstIterCols, MatAAccess, MatBAccess, MatCAccess>(i, j);
+        }
+    }
+}
+
+template<
+        typename NumType,
+        NumType (*BinOperand)(NumType, NumType)
+        >
+template<
+        bool FirstIterCols,
+        size_t (*MatAAccess)(size_t, size_t, size_t),
+        size_t (*MatBAccess)(size_t, size_t, size_t),
+        size_t (*MatCAccess)(size_t, size_t, size_t)
+        >
+void CrossedArraysBinOpMachine<NumType, BinOperand>::BlockLxLKernel(size_t HorCord, size_t VerCord)
+// !!!WARNING!!! FirstIterCols changes access function argument order !!!
+// LxL <- Line x Line, where line is length of cache line
+//
+// FirstIterCols -> if true means kernel will iterate through columns one by one,
+// otherwise computation will go row by row.
+//
+// !!!WARNING!!! FirstIterCols changes access function argument order !!!
+// First argument to access function is always first iterator, next is second iterator and last one is SoL
+{
+    const auto [ FirstIterCord, FirstIterRange, SecondIterCord, SecondIterRange ] = [&](){
+        const size_t VerRange { GetVerRange(VerCord) };
+        const size_t HorRange { GetHorRange(HorCord) };
+
+        if constexpr (FirstIterCols) return std::make_tuple(HorCord, HorRange, VerCord, VerRange);
+        else return std::make_tuple(VerCord, VerRange, HorCord, HorRange);
+    }();
+
+    for (size_t i = FirstIterCord; i < FirstIterRange; ++i)
+        for (size_t j = SecondIterCord; j < SecondIterRange; ++j)
+            MatC[MatCAccess(i, j, MatCSoL)] = BinOperand(MatA[MatAAccess(i, j, MatASoL)],
+                                                         MatB[MatBAccess(i, j, MatBSoL)]
+            );
 }
 
 #endif // PARALLELNUM_NUMERICAL_CORE_H_

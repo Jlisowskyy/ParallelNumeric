@@ -23,23 +23,19 @@ add_executable(ParallelNumeric
         Include/Maintenance/ErrorCodes.hpp
         Include/Maintenance/PerfTests.hpp
         Include/Management/ResourceManager.hpp
-        Include/Operations/MatrixAndVectorOperations.hpp
         Include/Operations/NumericalAlgorithms.hpp
         Include/Operations/NumericalCore.hpp
         Include/Operations/RecursiveFunctions.hpp
         Include/Types/Matrix.hpp
         Include/Types/Vector.hpp
-        Include/Wrappers/InterfaceFunctions.hpp
         Include/Wrappers/ParallelNumeric.hpp
         Include/Wrappers/OptimalOperations.hpp
-        Include/Operations/MatrixMultiplicationSolutions.hpp
         Src/ParallelNumeric.cpp
         Src/ResourceManager.cpp
         Src/Debuggers.cpp
         Src/Matrix.cpp
         Src/NumericalCore.cpp
         Src/ErrorCodes.cpp
-        Src/MatrixMultiplicationSolutions.cpp
         Include/Operations/MatrixMultiplication.hpp
         Src/MatrixMultiplication.cpp
         Src/Vector.cpp

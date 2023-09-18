@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <cmath>
 #include <tuple>
+#include <functional>
 
 #include "../Wrappers/OptimalOperations.hpp"
 
@@ -35,11 +36,16 @@ D2Pack Gen2Dims(size_t OpCount){
     return std::make_tuple(dim1, dim2);
 }
 
-template<typename Arg1T, typename Arg2T, typename ResT,
-        std::tuple<Arg1T, Arg2T> (*ConstrPack)(size_t),
+template<
+        typename Arg1T,
+        typename Arg2T,
+        typename ResT,
+        std::tuple<Arg1T,
+        Arg2T> (*ConstrPack)(size_t),
         ResT (*FuncToTest)(std::tuple<Arg1T, Arg2T>&),
         bool (*SuccessTest)(std::tuple<Arg1T, Arg2T>&, ResT&, bool) = nullptr,
-        bool Verbose = false>
+        bool Verbose = false
+        >
 void PerformXXXTest(size_t OpCount, unsigned RunsToGo, long Seed = 0)
 {
     unsigned SuccessfulRuns{};
@@ -95,9 +101,14 @@ void PerformXXXTest(size_t OpCount, unsigned RunsToGo, long Seed = 0)
     }
 }
 
-template<bool Verbose = false, D3Pack(*GetDims)(size_t) = Gen3Dims,
-        bool IsArg1Hor = false, bool IsArg2Hor = false, bool IsResultHor = false,
-        typename NumType = DefaultNumType>
+template<
+        bool Verbose = false,
+        D3Pack(*GetDims)(size_t) = Gen3Dims,
+        bool IsArg1Hor = false,
+        bool IsArg2Hor = false,
+        bool IsResultHor = false,
+        typename NumType = DefaultNumType
+        >
 void PerformMMTest(size_t OpCount, unsigned RunsToGo, long Seed = 0){
     using MatT = Matrix1<NumType>;
     using MatP = std::tuple<MatT, MatT>;
@@ -128,7 +139,11 @@ void PerformMMTest(size_t OpCount, unsigned RunsToGo, long Seed = 0){
                     Verbose>(OpCount, RunsToGo, Seed);
 }
 
-template<typename NumType,  Vector<NumType>&(Vector<NumType>::*UnaryOperand)(), bool Verbose = false>
+template<
+        typename NumType,
+        Vector<NumType>&(Vector<NumType>::*UnaryOperand)(),
+        bool Verbose = false
+        >
 void PerformVectOnDataTest(size_t VectorSize, unsigned RunsToGo){
     using VecT = Vector<NumType>;
     using VecP = std::tuple<VecT, bool>;
@@ -144,7 +159,12 @@ void PerformVectOnDataTest(size_t VectorSize, unsigned RunsToGo){
         >(VectorSize, RunsToGo);
 }
 
-template <bool Verbose = false, bool IsHor = false, D2Pack(*GetDims)(size_t) = Gen2Dims, typename NumType = DefaultNumType>
+template<
+        bool Verbose = false,
+        bool IsHor = false,
+        D2Pack(*GetDims)(size_t) = Gen2Dims,
+        typename NumType = DefaultNumType
+        >
 void PerformOutProdTest(size_t OpCount, unsigned RunsToGo, long Seed = 0) {
     using ArgT = Vector<NumType>;
     using ArgP = std::tuple<ArgT, ArgT>;
@@ -172,8 +192,13 @@ void PerformOutProdTest(size_t OpCount, unsigned RunsToGo, long Seed = 0) {
             },Verbose>(OpCount, RunsToGo, Seed);
 }
 
-template<bool Verbose = false, bool IsArgMatHor = false, bool IsVectHor = false,
-        D2Pack(*GetDims)(size_t) = Gen2Dims, typename NumType = DefaultNumType>
+template<
+        bool Verbose = false,
+        bool IsArgMatHor = false,
+        bool IsVectHor = false,
+        D2Pack(*GetDims)(size_t) = Gen2Dims,
+        typename NumType = DefaultNumType
+        >
 void PerformVectMatMultTest(size_t OperationCount, unsigned RunsToGo, long Seed = 0){
     using MatT = Matrix1<NumType>;
     using VecT= Vector<NumType>;
@@ -223,7 +248,10 @@ void PerformVectMatMultTest(size_t OperationCount, unsigned RunsToGo, long Seed 
             (OperationCount, RunsToGo, Seed);
 }
 
-template<bool Verbose = false, typename NumType = DefaultNumType>
+template<
+        bool Verbose = false,
+        typename NumType = DefaultNumType
+        >
 void PerformInnerProductTest(size_t VectorSize, unsigned RunsToGo){
     using VecT = Vector<NumType>;
     using VecP = std::tuple<VecT, VecT>;
@@ -251,8 +279,14 @@ void PerformInnerProductTest(size_t VectorSize, unsigned RunsToGo){
     >(VectorSize, RunsToGo);
 }
 
-template<bool Verbose = false, D2Pack(*GetDims)(size_t) = Gen2Dims,
-        bool IsResHor = false, bool IsArg1Hor = false, bool IsArg2Hor = false, typename NumType = DefaultNumType>
+template<
+        bool Verbose = false,
+        D2Pack(*GetDims)(size_t) = Gen2Dims,
+        bool IsResHor = false,
+        bool IsArg1Hor = false,
+        bool IsArg2Hor = false,
+        typename NumType = DefaultNumType
+        >
 void PerformMatrixSumTest(size_t OpCount, unsigned RunsToGo){
     using MatT = Matrix1<NumType>;
     using ArgP = std::tuple<MatT, MatT>;
@@ -276,6 +310,46 @@ void PerformMatrixSumTest(size_t OpCount, unsigned RunsToGo){
             },
             [](ArgP& Args, MatT& Result, bool Verb){
                 NumType ExpectedValue { std::get<0>(Args)[0] + std::get<1>(Args)[0] };
+                return Result.CheckForIntegrity(ExpectedValue, Verb);
+            }, Verbose
+    >(OpCount, RunsToGo);
+}
+
+template<
+        typename NumType,
+        NumType (*BinOperand)(NumType, NumType),
+        bool Verbose = false,
+        D2Pack(*GetDims)(size_t) = Gen2Dims,
+        bool IsResHor = false,
+        bool IsArg1Hor = false,
+        bool IsArg2Hor = false
+        >
+void PerformCroseedArrayTest(size_t OpCount, unsigned RunsToGo)
+    // Crossed Array means commonly used template to efficiently perform not looped operations between at least two arrays
+    // which are held in different way
+{
+    using MatT = Matrix1<NumType>;
+    using ArgP = std::tuple<MatT, MatT>;
+
+    PerformXXXTest<MatT, MatT, MatT,
+            [](size_t OpCount) -> ArgP{
+                D2Pack Dims { GetDims(OpCount) };
+
+                if constexpr (Verbose){
+                    std::cout << "Generated dims: " << std::get<0>(Dims) << ", " << std::get<1>(Dims) << '\n';
+                }
+
+                NumType Val1 { GenerateNumber(1,500) };
+                NumType Val2 { GenerateNumber(1, 500) };
+
+                return std::make_tuple(MatT(std::get<0>(Dims), std::get<1>(Dims), Val1, IsArg1Hor),
+                                       MatT(std::get<0>(Dims), std::get<1>(Dims), Val2, IsArg2Hor));
+            },
+            [](ArgP& Args) -> MatT{
+                return std::get<0>(Args) + std::get<1>(Args); // TODO: INSERT TEMPLATE
+            },
+            [](ArgP& Args, MatT& Result, bool Verb){
+                NumType ExpectedValue { BinOperand(std::get<0>(Args)[0], std::get<1>(Args)[0]) };
                 return Result.CheckForIntegrity(ExpectedValue, Verb);
             }, Verbose
     >(OpCount, RunsToGo);
