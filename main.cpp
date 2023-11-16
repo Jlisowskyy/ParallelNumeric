@@ -12,8 +12,8 @@
 #include "Include/Wrappers/OptimalOperations.hpp"
 
 //#define DebugSumProd
-//#define DebugMatrix1
-#define DebugVectors1
+#define DebugMatrix1
+//#define DebugVectors1
 
 #ifdef DebugSumProd
 
@@ -47,18 +47,18 @@ int main() {
 
 #elif defined DebugMatrix1
 
-  const unsigned dim = 8160;
+  const unsigned dim = 4096;
 
 int main() {
-//    Mat M1(dim, dim, (double)0);
-//    Mat M2(dim, dim, (double)1);
+    Mat M1(dim, dim, (double)0);
+    Mat M2(dim, dim, (double)1);
 
-//    Timer T1;
-//    auto M3 = M1 * M2;
-//    T1.Stop();
+    Timer T1;
+    auto M3 = M1 * M2;
+    T1.Stop();
 //    std::cout << M3;
 
-    PerformMMTest<double, [](unsigned long long) -> D3Pack { return {dim,dim,dim}; } >(1e+9, 5, 15060);
+//    PerformMMTest<double, [](unsigned long long) -> D3Pack { return {dim,dim,dim}; } >(1e+9, 5, 15060);
 }
 
 // BEFORE BLOCKING UPDATE: 5.5 on dim dim dim, where dim = 4096

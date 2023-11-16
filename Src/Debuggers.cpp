@@ -1,19 +1,32 @@
 //
 // Created by Jlisowskyy on 13/08/2023.
 //
+
 #include <iostream>
 #include "../Include/Maintenance/Debuggers.hpp"
+
 unsigned Timer::TimerCount = 0;
 
-void Timer::WriteMessage(long long SpentTime){
-    std::cout << "\nTimer with ID: " << TimerID;
+// --------------------------------------------
+// class life manipulation implementation
+// --------------------------------------------
 
-    if (TimerName) std::cout << ", and name: " << TimerName;
-
-    std::cout << ", spent time: \nIn seconds: " << (double) SpentTime * 1e-9 <<
-        "\nIn milliseconds: " << (double) SpentTime * 1e-6 << "\nIn microseconds: " <<
-        (double) SpentTime * 1e-3 << "\nIn nanoseconds: " << SpentTime << std::endl;
+Timer::~Timer() {
+    if (WriteOnDeath) {
+        ShortenAverageToThisRun();
+        Stop();
+    }
 }
+
+Timer::Timer(const char *YourName, bool WriteOnDeath) :
+        TimerName{ YourName }, WriteOnDeath{ WriteOnDeath }, TimerID{TimerCount++ }
+{
+    Start();
+}
+
+// --------------------------------------
+// class interaction implementation
+// --------------------------------------
 
 long long Timer::Stop()  {
     std::chrono::steady_clock::duration Duration =
@@ -57,4 +70,40 @@ void Timer::CalculateAverageTime(unsigned int AmountOfTries, bool Verbose) {
     RunsSum = 0;
     VerboseAverage = Verbose;
     Start();
+}
+
+void Timer::Stop_and_Start() {
+    Stop();
+    Start();
+}
+
+
+
+void Timer::InvalidateLastRun() {
+    if (RunsDone == 0) return;
+
+    --RunsDone;
+    RunsSum -= LastRun;
+}
+
+void Timer::Start() { begin = std::chrono::steady_clock::now(); }
+
+
+
+// ------------------------------------
+// private methods implementation
+// ------------------------------------
+
+void Timer::WriteMessage(long long SpentTime){
+    std::cout << "\nTimer with ID: " << TimerID;
+
+    if (TimerName) std::cout << ", and name: " << TimerName;
+
+    std::cout << ", spent time: \nIn seconds: " << (double) SpentTime * 1e-9 <<
+        "\nIn milliseconds: " << (double) SpentTime * 1e-6 << "\nIn microseconds: " <<
+        (double) SpentTime * 1e-3 << "\nIn nanoseconds: " << SpentTime << std::endl;
+}
+
+void Timer::ShortenAverageToThisRun() {
+    RunsToIncludeInAverage = RunsDone + 1;
 }
