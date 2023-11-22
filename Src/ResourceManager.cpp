@@ -1,4 +1,3 @@
-
 // Author: Jakub Lisowski
 
 #include "../Include/Management/ResourceManager.hpp"
@@ -8,6 +7,10 @@
 ResourceManager* DefaultMM = nullptr;
 size_t MemUsageCollector::GlobalUsage = 0;
 ThreadPackage ResourceManager::ThreadAssets[ResourceManager::ThreadsAssetsSetsAmount];
+
+// -------------------------------------
+// Resource manager implementation
+// -------------------------------------
 
 ResourceManager::~ResourceManager(){
     for(auto& Iter : MemAssets){
@@ -28,6 +31,10 @@ ThreadPackage &ResourceManager::GetThreads()
     throw std::runtime_error("[ERROR] Thread resources overload. All threads should be released after usage\n");
 }
 
+// --------------------------------------------------
+// Memory usage collecting class implementation
+// --------------------------------------------------
+
 void MemUsageCollector::SetUsage(size_t Mem) {
     GlobalUsage -= InstanceUsage;
     GlobalUsage += Mem;
@@ -39,8 +46,13 @@ void MemUsageCollector::AppendUsage(size_t Arg) {
     GlobalUsage += Arg;
 }
 
+// ----------------------------------------------------
+// Small resources related classed implementation
+// ----------------------------------------------------
+
 Region::Region(SizeMB Val) : Used{ 0 } {
     Size = Val.GetBytes();
+    Mem = nullptr;
     AllocateCacheAligned();
 }
 

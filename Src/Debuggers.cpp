@@ -1,6 +1,4 @@
-//
-// Created by Jlisowskyy on 13/08/2023.
-//
+// Author: Jakub Lisowski
 
 #include <iostream>
 #include "../Include/Maintenance/Debuggers.hpp"

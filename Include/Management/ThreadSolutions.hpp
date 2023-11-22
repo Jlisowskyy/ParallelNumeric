@@ -1,9 +1,7 @@
-//
-// Created by Jlisowskyy on 05/09/2023.
-//
+// Author: Jakub Lisowski
 
-#ifndef PARALLELNUMERIC_THREADSOLUTIONS_HPP
-#define PARALLELNUMERIC_THREADSOLUTIONS_HPP
+#ifndef PARALLEL_NUM_THREAD_SOLUTIONS_H
+#define PARALLEL_NUM_THREAD_SOLUTIONS_H
 
 #include <cstdlib>
 #include "ResourceManager.hpp"
@@ -11,7 +9,7 @@
 template<typename NumType, typename... ThreadParam>
 inline void ExecuteThreadsWOutput(NumType* ResultTab, size_t ThreadAmount, ThreadParam... Args)
     // Commonly used template to use with the task into parts breaking thread solutions
-    // Executes threads, which saves their results into ResultTab with respect to their birth order
+    // Executes threads, which saves their results into ResultTab with respect to their birth order.
 {
     ThreadPackage& Threads = ResourceManager::GetThreads();
     for (size_t i = 0; i < ThreadAmount; ++i) {
@@ -27,8 +25,8 @@ inline void ExecuteThreadsWOutput(NumType* ResultTab, size_t ThreadAmount, Threa
 
 template<typename... ThreadParam>
 inline void ExecuteThreads(size_t ThreadAmount, ThreadParam... Args)
-// Commonly used template to use with the task into parts breaking thread solutions
-// Executes threads, with assumptions that only thread input is its birth order symbol
+    // Commonly used template to use with the task into parts breaking thread solutions
+    // Executes threads, with assumptions that only thread input is its birth order symbol.
 {
     ThreadPackage& Threads = ResourceManager::GetThreads();
     for (size_t i = 0; i < ThreadAmount; ++i) {
@@ -44,7 +42,7 @@ inline void ExecuteThreads(size_t ThreadAmount, ThreadParam... Args)
 
 template<typename... ThreadParam>
 inline ThreadPackage& ExecuteThreadsWNJoining(size_t ThreadAmount, ThreadParam... Args)
-    // Just spawns thread without id inputs, should be joined after
+    // Just spawns thread without id inputs, should be joined after.
 {
     ThreadPackage& Threads = ResourceManager::GetThreads();
     for (size_t i = 0; i < ThreadAmount; ++i) {
@@ -63,4 +61,4 @@ inline void JoinThreads(size_t ThreadAmount, ThreadPackage&  Threads)
     Threads.Release();
 }
 
-#endif //PARALLELNUMERIC_THREADSOLUTIONS_HPP
+#endif //PARALLEL_NUM_THREAD_SOLUTIONS_H

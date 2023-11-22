@@ -1,8 +1,7 @@
-
 // Author: Jakub Lisowski
 
-#ifndef PARALLELNUM_VECTORS_H_
-#define PARALLELNUM_VECTORS_H_
+#ifndef PARALLEL_NUM_VECTORS_H_
+#define PARALLEL_NUM_VECTORS_H_
 
 #include <cstdlib>
 #include <cmath>
@@ -20,93 +19,116 @@ extern ResourceManager* DefaultMM;
 
 template<typename NumType>
 class Vector: public MemUsageCollector
+    /*                  Important Notes
+     *  Class encapsulating and applying abstraction on numerical backend.
+     *  Introduces many operators driven functions simplifying calculations.
+     *  The Underlying array is always expanded to cache length divisible size.
+     *  It allows small optimizations to be made.
+     * */
+
+    /*              Vector TODOS:
+     *  - add to all void methods *this on return?
+     *  -
+     * */
 {
+// ------------------------------
+// Class creation
+// ------------------------------
 protected:
-    size_t Size;
-	bool IsHorizontal;
-	const ResourceManager* MM;
-    NumType* Array;
 
-	inline void SetWholeData(NumType Val);
-    void CheckForIncorrectSize() const;
-	void AllocateArray();
-	void DeallocateArray();
-
-	// Used only for init_list<init_list> - unknown parameters
-	// Should not be used as a class constructor, may lead to unexpected problems
-	Vector(
-        bool IsHorizontal,
-        ResourceManager* MM
+    // Used only for init_list<init_list> - unknown parameters
+    // Should not be used as a class constructor, may lead to unexpected problems, so it is protected.
+    Vector(
+            bool IsHorizontal,
+            ResourceManager* MM
     ) noexcept :
-        Size{ 0 },
-        IsHorizontal{ IsHorizontal },
-        MM{ MM },
-        Array{ nullptr } {}
+            Size{ 0 },
+            IsHorizontal{ IsHorizontal },
+            MM{ MM },
+            Array{ nullptr } {}
 
 public:
-#ifdef DEBUG_
-    virtual bool CheckForIntegrity(NumType Val, bool Verbose) const;
-    virtual bool CheckForIntegrity(NumType* Val, bool Verbose) const;
-#endif
-	void MoveToArray(std::initializer_list<NumType> Init);
 
-	explicit Vector(
+    explicit Vector(
             size_t Size,
             bool IsHorizontal = false,
             ResourceManager* MM = DefaultMM
     ) noexcept;
 
-	Vector(
-        size_t Size,
-        NumType InitVal,
-        bool IsHorizontal = false,
-        ResourceManager* MM = DefaultMM
+    Vector(
+            size_t Size,
+            NumType InitVal,
+            bool IsHorizontal = false,
+            ResourceManager* MM = DefaultMM
     ) noexcept;
 
-	Vector(
-        std::initializer_list<NumType> Init,
-        bool IsHorizontal = false,
-        ResourceManager* MM = DefaultMM
+    Vector(
+            std::initializer_list<NumType> Init,
+            bool IsHorizontal = false,
+            ResourceManager* MM = DefaultMM
     ) noexcept;
 
-	Vector(
-        const Vector& Target
+    Vector(
+            const Vector& Target
     ) noexcept;
 
-	Vector(
-        Vector&& Target
+    Vector(
+            Vector&& Target
     ) noexcept;
 
-	Vector(
-        size_t Size,
-        NumType* Init,
-        bool IsHorizontal = false,
-        ResourceManager* MM = DefaultMM
+    Vector(
+            size_t Size,
+            NumType* Init,
+            bool IsHorizontal = false,
+            ResourceManager* MM = DefaultMM
     ) noexcept;
 
-	Vector(
-        size_t Size,
-        const NumType* Init,
-        bool IsHorizontal = false,
-        ResourceManager* MM = DefaultMM
+    Vector(
+            size_t Size,
+            const NumType* Init,
+            bool IsHorizontal = false,
+            ResourceManager* MM = DefaultMM
     );
 
     ~Vector(){
         DeallocateArray();
     }
 
+// ------------------------------------
+// Class creation helping methods
+// ------------------------------------
+
+protected:
+    inline void SetWholeData(NumType Val);
+    void CheckForIncorrectSize() const;
+    void AllocateArray();
+    void DeallocateArray();
+
+// --------------------------------------------
+// Class interaction/modification methods
+// --------------------------------------------
+
+public:
+
+	void MoveToArray(std::initializer_list<NumType> Init);
 	Vector& operator=(const Vector& Vec);
 	Vector& operator=(Vector&& Vec) noexcept;
-    inline size_t GetSize() const { return Size; }
-	inline bool GetIsHorizontal() const { return IsHorizontal; }
-	inline NumType* GetArray() const { return Array; }
-    inline NumType* GetArray() { return Array; }
+    [[nodiscard]] inline size_t GetSize() const { return Size; }
+	[[nodiscard]] inline bool GetIsHorizontal() const { return IsHorizontal; }
+	[[nodiscard]] inline NumType* GetArray() const { return Array; }
+    [[nodiscard]] inline NumType* GetArray() { return Array; }
 	inline void Transpose() noexcept { IsHorizontal = !IsHorizontal; }
 
-	inline NumType& operator[](size_t Ind) { return Array[Ind]; }
-	inline const NumType& operator[](size_t Ind) const { return Array[Ind]; }
+    [[nodiscard]] inline NumType& operator[](size_t Ind) { return Array[Ind]; }
+    [[nodiscard]] inline const NumType& operator[](size_t Ind) const { return Array[Ind]; }
+
+// ------------------------------
+// Vector printing methods
+// ------------------------------
+
 private:
-	void PrintHorizontally(std::ostream& Out) const;
+
+    void PrintHorizontally(std::ostream& Out) const;
 	void PrintVertically(std::ostream& Out) const;
 
 public:
@@ -120,20 +142,43 @@ public:
 		return Out;
 	}
 
+// -------------------------------------
+// Vector on data applying methods
+// -------------------------------------
+
     template<NumType(*UnaryOperation)(NumType)>
     inline void ApplyOnDataEffect();
 
+// TODO: make separate AVX1 and AVX2 detection
 #if defined(__AVX__) || defined(__AVX2__)
+
     template<
             typename AVXType,
             AVXType (AVXOperation)(AVXType),
-            NumType(*UnCleaningOperation)(NumType)
+            NumType(*UnaryCleaningOperation)(NumType)
             >
-    inline void ApplyAVXOnDataEffect();
+    inline void ApplyAVXOnDataEffect()
+    {
+        static constexpr size_t PackageSize = AVXInfo::ByteCap / sizeof(NumType);
+        const size_t Range = (Size / GetCacheLineElem<NumType>()) * GetCacheLineElem<NumType>();
+
+        #pragma omp parallel for
+        for (size_t i = 0; i < Range; i += GetCacheLineElem<NumType>()) {
+            *((AVXType*)(Array + i)) = AVXOperation(*((AVXType*)(Array + i)));
+            *((AVXType*)(Array + i + PackageSize)) = AVXOperation(*((AVXType*)(Array + i + PackageSize)));
+        }
+        for(size_t i = Range; i < Size; ++i){
+            Array[i] = UnaryCleaningOperation(Array[i]);
+        }
+    }
+
 #endif // __AVX__ or __AVX2__
 
-	// On-data operations
-	Vector& sqrt() {
+// ----------------------------------------------------
+// Prepared in advance on data applying methods
+// ----------------------------------------------------
+
+    Vector& sqrt() {
         ApplyOnDataEffect<std::sqrt>();
         return *this;
 	}
@@ -202,25 +247,44 @@ public:
         return *this;
 	}
 
-	Vector GetModified(void (Vector::*Func)()) const {
+    [[nodiscard]] Vector GetModified(void (Vector::*Func)()) const {
 		Vector RetVal = *this;
 		(RetVal.*Func)();
 		return RetVal;
 	}
 
-	Vector GetModified(NumType(*Func)(NumType x)) const {
+    [[nodiscard]] Vector GetModified(NumType(*Func)(NumType x)) const {
 		Vector RetVal = *this;
         RetVal.ApplyOnDataEffect<Func>();
 		return RetVal;
 	}
 
+// --------------------------------
+// Numerical backend wrappers
+// --------------------------------
 
 private:
     friend inline DotProductMachine<NumType> GetDProdMach(const Vector<NumType>& A, const Vector<NumType>& B){
         return DotProductMachine<NumType>(A.Array, B.Array, A.Size);
     }
+
+    // TODO: make universal template for +/-
+    template<NumType (*BinOp)(NumType, NumType)>
+    friend inline Vector<NumType> GetArrOnArrayResult(const Vector<NumType>& A, const Vector<NumType>& B){
+        Vector<NumType> RetVal(A.Size);
+        return ApplyArrayOnArrayOp<NumType, BinOp>(RetVal.Array, A.Array, B.Array, B.Size);
+    }
+
+    template<NumType (*BinOp)(NumType, NumType)>
+    friend inline Vector<NumType> GetScalarOnArrayResult(const Vector<NumType>& A, NumType& B){
+        Vector<NumType> RetVal(A.Size);
+        return ApplyScalarOpOnArray<NumType, BinOp>(RetVal.Array, A.Array, B, A.Size);
+    }
+
+// ------------------------------
+// Vector operations
+// ------------------------------
 public:
-	// Vector and Vector operations
 
     template<
             size_t ThreadCap = 20,
@@ -241,26 +305,6 @@ public:
         }
     }
 
-// --------------------------------------
-// TODO: reconsider this part:
-// --------------------------------------
-
-    // TODO: make universal template for +/-
-
-private:
-    template<NumType (*BinOp)(NumType, NumType)>
-    friend inline Vector<NumType> GetArrOnArrResult(const Vector<NumType>& A, const Vector<NumType>& B){
-        Vector<NumType> RetVal(A.Size);
-        return ApplyArrayOnArrayOp<NumType, BinOp>(RetVal.Array, A.Array, B.Array, B.Size);
-    }
-
-    template<NumType (*BinOp)(NumType, NumType)>
-    friend inline Vector<NumType> GetScalOnArrResult(const Vector<NumType>& A, NumType& B){
-        Vector<NumType> RetVal(A.Size);
-        return ApplyScalarOpOnArray<NumType, BinOp>(RetVal.Array, A.Array, B, A.Size);
-    }
-public:
-
     Vector<NumType>& operator+=(const Vector<NumType>& B);
     Vector<NumType>& operator+=(const NumType& B);
     Vector<NumType>& operator-=(const Vector<NumType>& B);
@@ -275,7 +319,7 @@ public:
             throw std::runtime_error("[ERROR] Not able to perform Vector addition: Not same sizes\n");
         }
 
-        return GetArrOnArrResult<std::plus<NumType>>(A, B);
+        return GetArrOnArrayResult<std::plus<NumType>>(A, B);
     }
 
     friend Vector<NumType> operator+(const Vector<NumType>& A, const NumType& B){
@@ -283,25 +327,25 @@ public:
             throw std::runtime_error("[ERROR] Not able to perform Vector addition: Not same sizes\n");
         }
 
-        return GetScalOnArrResult<std::plus<NumType>>(A, B);
+        return GetScalarOnArrayResult<std::plus<NumType>>(A, B);
     }
 
     friend Vector<NumType> operator-(const Vector<NumType>& A, const Vector<NumType>& B){
         if (A.Size != B.Size){
             throw std::runtime_error("[ERROR] Not able to perform Vector substitution: Not same sizes\n");
         }
-        return GetArrOnArrResult<std::minus<NumType>>(A, B);
+        return GetArrOnArrayResult<std::minus<NumType>>(A, B);
     }
 
     friend Vector<NumType> operator-(const Vector<NumType>& A, const NumType& B){
         if (A.Size != B.Size){
             throw std::runtime_error("[ERROR] Not able to perform Vector substitution: Not same sizes\n");
         }
-        return GetScalOnArrResult<std::minus<NumType>>(A, B);
+        return GetScalarOnArrayResult<std::minus<NumType>>(A, B);
     }
 
     friend Vector<NumType> operator*(const Vector<NumType>& A, const NumType& B){
-        return GetScalOnArrResult<std::multiplies<NumType>>(A, B);
+        return GetScalarOnArrayResult<std::multiplies<NumType>>(A, B);
     }
 
     friend Vector<NumType> operator/(const Vector<NumType>& A, const NumType& B){
@@ -310,103 +354,52 @@ public:
         }
 
         const NumType Coef { 1 / B };
-        return GetScalOnArrResult<std::multiplies<NumType>>(A, Coef);
+        return GetScalarOnArrayResult<std::multiplies<NumType>>(A, Coef);
     }
 
     friend Vector<NumType> ElemByElemMult(const Vector<NumType>& A, const Vector<NumType>& B){
         if (A.Size != B.Size) [[unlikely]]{
             throw std::runtime_error("[ERROR] Not able to perform ElemByElemMult, because Vectors have different sizes\n");
         }
-        return GetArrOnArrResult<std::multiplies<NumType>>(A,B);
+        return GetArrOnArrayResult<std::multiplies<NumType>>(A, B);
     }
 
     friend Vector<NumType> ElemByElemDiv(const Vector<NumType>& A, const Vector<NumType>& B){
         if (A.Size != B.Size) [[unlikely]]{
             throw std::runtime_error("[ERROR] Not able to perform ElemByElemDiv, because Vectors have different sizes\n");
         }
-        return GetArrOnArrResult<std::divides<NumType>>(A,B);
+        return GetArrOnArrayResult<std::divides<NumType>>(A, B);
     }
+
+// ------------------------------
+// Class debugging methods
+// ------------------------------
+
+public:
+
+#ifdef DEBUG_
+    [[nodiscard]] virtual bool CheckForIntegrity(NumType Val, bool Verbose) const;
+    [[nodiscard]] virtual bool CheckForIntegrity(NumType* Val, bool Verbose) const;
+#endif
+
+// ----------------------------------
+// Private and protected fields
+// ----------------------------------
+
+protected:
+    size_t Size;
+    bool IsHorizontal;
+    const ResourceManager* MM;
+    NumType* Array;
 };
 
-//-----------------------------------------
-// Construction helpers implementation
-//-----------------------------------------
+/*--------------------------------------------------------------------------------------------------------------------*/
+//                                                  IMPLEMENTATION                                                    //
+/*--------------------------------------------------------------------------------------------------------------------*/
 
-template<typename NumType>
-void Vector<NumType>::SetWholeData(NumType Val)
-// Sets whole data to desired value in case of Val == 0 uses ZeroMemory macro
-{
-    if (Val == 0) [[likely]]{
-#ifdef OP_SYS_WIN
-        ZeroMemory(Array, Size * sizeof(NumType));
-#else
-        memset(Array, 0, Size * sizeof(NumType));
-#endif
-    }
-    else {
-#pragma omp parallel for
-        for (size_t i = 0; i < Size; ++i)
-            Array[i] = Val;
-    }
-}
-
-template<typename NumType>
-void Vector<NumType>::DeallocateArray() {
-    if (!MM) [[likely]] {
-#ifdef OP_SYS_WIN
-        _aligned_free(Array);
-#elif defined OP_SYS_UNIX
-        free(Array);
-#endif
-    }
-    else {
-        // TODO
-    }
-}
-
-template<typename NumType>
-void Vector<NumType>::AllocateArray()
-// Allocates memory aligned to cache line length
-{
-    if (!MM) [[likely]] {
-        // To unify allocation and algorithms,
-        // all vectors like matrices are extended to sizes divisible by length of cache line
-        const size_t ElementsOnLastCacheLine = Size % GetCacheLineElem<NumType>();
-        const size_t ElementsToExtend { ElementsOnLastCacheLine == 0 ? 0 : (GetCacheLineElem<NumType>() - ElementsOnLastCacheLine) };
-        const size_t ExtendedSize { Size + ElementsToExtend };
-        const size_t ByteSize { ExtendedSize * sizeof(NumType) } ;
-#ifdef OP_SYS_WIN
-        Array = (NumType*)_aligned_malloc(ByteSize, CacheInfo::LineSize);
-#elif defined(OP_SYS_UNIX)
-        Array = (NumType*)aligned_alloc(CacheInfo::LineSize, ByteSize);
-#endif
-        BaseAbandonIfNull(Array, ByteSize);
-        SetUsage(ByteSize);
-
-        // TODO: Temporary solution
-        for (size_t j = Size; j < ExtendedSize; ++j) Array[j] = 0;
-    }
-    else {
-        // TODO
-    }
-
-}
-
-template<typename NumType>
-void Vector<NumType>::MoveToArray(std::initializer_list<NumType> Init) {
-    if (Init.size() != Size) [[unlikely]]
-                throw std::runtime_error("[ERROR] Invalid init list sizes\n");
-
-    const auto Matrix = std::data(Init);
-
-#pragma omp parallel for
-    for (size_t i = 0; i < Size; ++i)
-        Array[i] = Matrix[i];
-}
-
-//-----------------------------------------------------------
-// Constructors implementation
-//-----------------------------------------------------------
+// -----------------------------------
+// Class creation implementation
+// -----------------------------------
 
 template<typename NumType>
 Vector<NumType>::Vector(size_t Size, const NumType *Init, bool IsHorizontal, ResourceManager *MM):
@@ -484,15 +477,151 @@ Vector<NumType>::Vector(size_t Size, bool IsHorizontal, ResourceManager *MM) noe
     AllocateArray();
 }
 
+// ------------------------------------
+// Class creation helping methods
+// ------------------------------------
+
+template<typename NumType>
+void Vector<NumType>::SetWholeData(NumType Val)
+// Sets whole data to desired value in case of Val == 0 uses ZeroMemory macro
+{
+    if (Val == 0) [[likely]]{
+#ifdef OP_SYS_WIN
+        ZeroMemory(Array, Size * sizeof(NumType));
+#else
+        memset(Array, 0, Size * sizeof(NumType));
+#endif
+    }
+    else {
+        #pragma omp parallel for
+        for (size_t i = 0; i < Size; ++i)
+            Array[i] = Val;
+    }
+}
+
 template<typename NumType>
 void Vector<NumType>::CheckForIncorrectSize() const {
     if (!Size) [[unlikely]]
-        throw std::runtime_error("[ERROR] Vector cannot be empty ( 0 size )\n");
+                throw std::runtime_error("[ERROR] Vector cannot be empty ( 0 size )\n");
 }
 
-//----------------------------------------
-// Vector apply operators implementation
-//----------------------------------------
+template<typename NumType>
+void Vector<NumType>::AllocateArray()
+// Allocates memory aligned to cache line length
+{
+    if (!MM) [[likely]] {
+        // To unify allocation and algorithms,
+        // all vectors like matrices are extended to sizes divisible by length of cache line
+        const size_t ElementsOnLastCacheLine = Size % GetCacheLineElem<NumType>();
+        const size_t ElementsToExtend { ElementsOnLastCacheLine == 0 ? 0 : (GetCacheLineElem<NumType>() - ElementsOnLastCacheLine) };
+        const size_t ExtendedSize { Size + ElementsToExtend };
+        const size_t ByteSize { ExtendedSize * sizeof(NumType) } ;
+#ifdef OP_SYS_WIN
+        Array = (NumType*)_aligned_malloc(ByteSize, CacheInfo::LineSize);
+#elif defined(OP_SYS_UNIX)
+        Array = (NumType*)aligned_alloc(CacheInfo::LineSize, ByteSize);
+#endif
+        BaseAbandonIfNull(Array, ByteSize);
+        SetUsage(ByteSize);
+
+        // TODO: Temporary solution: try to zero whole last cache line or avx line?
+        for (size_t j = Size; j < ExtendedSize; ++j) Array[j] = 0;
+    }
+    else {
+        // TODO: Memory management should not be used yet
+    }
+}
+
+template<typename NumType>
+void Vector<NumType>::DeallocateArray() {
+    if (!MM) [[likely]] {
+#ifdef OP_SYS_WIN
+        _aligned_free(Array);
+#elif defined OP_SYS_UNIX
+        free(Array);
+#endif
+    }
+    else {
+        // TODO: MM is not implemented correctly yet
+    }
+}
+
+// --------------------------------------------
+// Class interaction/modification methods
+// --------------------------------------------
+
+template<typename NumType>
+void Vector<NumType>::MoveToArray(std::initializer_list<NumType> Init) {
+    if (Init.size() != Size) [[unlikely]]
+                throw std::runtime_error("[ERROR] Invalid init list sizes\n");
+
+    const auto Matrix = std::data(Init);
+
+    #pragma omp parallel for
+    for (size_t i = 0; i < Size; ++i)
+        Array[i] = Matrix[i];
+}
+
+template<typename NumType>
+Vector<NumType> &Vector<NumType>::operator=(Vector &&Vec) noexcept {
+    auto Temp = Vec.Array;
+    Vec.Array = nullptr;
+    DeallocateArray();
+
+    Size = Vec.Size;
+    IsHorizontal = Vec.IsHorizontal;
+    Array = Temp;
+
+    return *this;
+}
+
+template<typename NumType>
+Vector<NumType> &Vector<NumType>::operator=(const Vector &Vec) {
+    if (this == &Vec) [[unlikely]] return *this;
+    DeallocateArray();
+
+    Size = Vec.Size;
+    IsHorizontal = Vec.IsHorizontal;
+
+    AllocateArray();
+    memcpy(Array, Vec.Array, Size * sizeof(NumType));
+
+    return *this;
+}
+
+// --------------------------------------------
+// Vector printing methods implementation
+// --------------------------------------------
+
+template<typename NumType>
+void Vector<NumType>::PrintHorizontally(std::ostream &Out) const {
+    size_t MaxPerCol = FindConsoleWidth() / 6;
+
+    Out << std::fixed << std::setprecision(3);
+
+    for (size_t i = 0; i + MaxPerCol <= Size; i+=MaxPerCol) {
+        Out << "Vector values within index range: " << i << '-' << i + MaxPerCol
+            << ':' << std::endl;
+
+        for (size_t j = 0; j < MaxPerCol; ++j) {
+            Out << Array[i + j] << ' ';
+        }
+
+        Out << std::endl;
+    }
+}
+
+template<typename NumType>
+void Vector<NumType>::PrintVertically(std::ostream &Out) const {
+    Out << std::endl;
+    for (size_t i = 0; i < Size; ++i)
+        Out << Array[i] << '\n';
+    Out << std::endl;
+}
+
+// ----------------------------------------------------
+// Vector on data applying methods implementation
+// ----------------------------------------------------
 
 template<typename NumType>
 template<NumType (*UnaryOperation)(NumType)>
@@ -505,23 +634,9 @@ void Vector<NumType>::ApplyOnDataEffect()
     }
 }
 
-template<typename NumType>
-Vector<NumType> &Vector<NumType>::ApplyElemByElemDiv(const Vector<NumType> &B) {
-    if (Size != B.Size) [[unlikely]]{
-        throw std::runtime_error("[ERROR] Not able to perform ApplyElemByElemDiv, because Vectors have different sizes\n");
-    }
-    ApplyArrayOnArrayOp<NumType, std::multiplies<NumType>>(Array, Array, B.Array, B.Size);
-    return *this;
-}
-
-template<typename NumType>
-Vector<NumType> &Vector<NumType>::ApplyElemByElemMult(const Vector<NumType> &B) {
-    if (Size != B.Size) [[unlikely]]{
-        throw std::runtime_error("[ERROR] Not able to perform ApplyElemByElemMult, because Vectors have different sizes\n");
-    }
-    ApplyArrayOnArrayOp<NumType, std::multiplies<NumType>>(Array, Array, B.Array, B.Size);
-    return *this;
-}
+// --------------------------------------
+// Vector operations implementation
+// --------------------------------------
 
 template<typename NumType>
 Vector<NumType> &Vector<NumType>::operator/=(const NumType &B) {
@@ -569,38 +684,29 @@ Vector<NumType> &Vector<NumType>::operator+=(const Vector<NumType> &B) {
     return *this;
 }
 
+template<typename NumType>
+Vector<NumType> &Vector<NumType>::ApplyElemByElemDiv(const Vector<NumType> &B) {
+    if (Size != B.Size) [[unlikely]]{
+        throw std::runtime_error("[ERROR] Not able to perform ApplyElemByElemDiv, because Vectors have different sizes\n");
+    }
+    ApplyArrayOnArrayOp<NumType, std::multiplies<NumType>>(Array, Array, B.Array, B.Size);
+    return *this;
+}
+
+template<typename NumType>
+Vector<NumType> &Vector<NumType>::ApplyElemByElemMult(const Vector<NumType> &B) {
+    if (Size != B.Size) [[unlikely]]{
+        throw std::runtime_error("[ERROR] Not able to perform ApplyElemByElemMult, because Vectors have different sizes\n");
+    }
+    ApplyArrayOnArrayOp<NumType, std::multiplies<NumType>>(Array, Array, B.Array, B.Size);
+    return *this;
+}
+
 //-----------------------------------------
 // AVX specs of applying operators and functions
 //-----------------------------------------
 
-#if defined(__AVX__) || defined(__AVX2__)
-
-template<typename NumType>
-template<
-        typename AVXType,
-        AVXType (*AVXOperation)(AVXType),
-        NumType (*UnaryCleaningOperation)(NumType)
-        >
-void Vector<NumType>::ApplyAVXOnDataEffect()
-// Transforms data with avx function
-{
-    static constexpr size_t PackageSize = AVXInfo::ByteCap / sizeof(NumType);
-    const size_t Range = (Size / GetCacheLineElem<NumType>()) * GetCacheLineElem<NumType>();
-
-#pragma omp parallel for
-    for (size_t i = 0; i < Range; i+= GetCacheLineElem<NumType>()) {
-        *((AVXType*)(Array + i)) = AVXOperation(*((AVXType*)(Array + i)));
-        *((AVXType*)(Array + i + PackageSize)) = AVXOperation(*((AVXType*)(Array + i + PackageSize)));
-    }
-    for(size_t i = Range; i < Size; ++i){
-        Array[i] = UnaryCleaningOperation(Array[i]);
-    }
-}
-
-
-#endif // AVX OR AVX2
-
-#ifdef __AVX__
+#ifdef __AVX2__
 
 template<>
 Vector<double>& Vector<double>::sqrt();
@@ -609,11 +715,11 @@ Vector<float>& Vector<float>::sqrt();
 template<>
 Vector<float>& Vector<float>::reciprocal();
 
-#endif // __AVX__
+#endif // __AVX2__
 
-//-----------------------------------------
-// Debug helpers and printing
-//-----------------------------------------
+// --------------------------------------------
+// Class debugging methods implementation
+// --------------------------------------------
 
 #ifdef DEBUG_
 
@@ -644,61 +750,4 @@ bool Vector<NumType>::CheckForIntegrity(NumType Val, bool Verbose) const {
 
 #endif // DEBUG_
 
-template<typename NumType>
-void Vector<NumType>::PrintHorizontally(std::ostream &Out) const {
-    size_t MaxPerCol = FindConsoleWidth() / 6;
-
-    Out << std::fixed << std::setprecision(3);
-
-    for (size_t i = 0; i + MaxPerCol <= Size; i+=MaxPerCol) {
-        Out << "Vector values within index range: " << i << '-' << i + MaxPerCol
-            << ':' << std::endl;
-
-        for (size_t j = 0; j < MaxPerCol; ++j) {
-            Out << Array[i + j] << ' ';
-        }
-
-        Out << std::endl;
-    }
-}
-
-template<typename NumType>
-void Vector<NumType>::PrintVertically(std::ostream &Out) const {
-    Out << std::endl;
-    for (size_t i = 0; i < Size; ++i)
-        Out << Array[i] << '\n';
-    Out << std::endl;
-}
-
-//-----------------------------------------
-// Assignment operators implementation
-//-----------------------------------------
-
-template<typename NumType>
-Vector<NumType> &Vector<NumType>::operator=(Vector &&Vec) noexcept {
-    auto Temp = Vec.Array;
-    Vec.Array = nullptr;
-    DeallocateArray();
-
-    Size = Vec.Size;
-    IsHorizontal = Vec.IsHorizontal;
-    Array = Temp;
-
-    return *this;
-}
-
-template<typename NumType>
-Vector<NumType> &Vector<NumType>::operator=(const Vector &Vec) {
-    if (this == &Vec) [[unlikely]] return *this;
-    DeallocateArray();
-
-    Size = Vec.Size;
-    IsHorizontal = Vec.IsHorizontal;
-
-    AllocateArray();
-    memcpy(Array, Vec.Array, Size * sizeof(NumType));
-
-    return *this;
-}
-
-#endif
+#endif // PARALLEL_NUM_VECTORS_H_

@@ -1,4 +1,3 @@
-
 // Author: Jakub Lisowski
 
 #ifndef PARALLEL_NUM_DEBUGGERS_H_

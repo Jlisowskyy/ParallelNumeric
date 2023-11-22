@@ -1,7 +1,7 @@
 // Author: Jakub Lisowski
 
-#ifndef PARALLELNUM_OPTIMALOPERATIONS_H
-#define PARALLELNUM_OPTIMALOPERATIONS_H
+#ifndef PARALLEL_NUM_OPTIMAL_OPERATIONS_H
+#define PARALLEL_NUM_OPTIMAL_OPERATIONS_H
 
 #include "../Operations/RecursiveFunctions.hpp"
 #include "../Types/Matrix.hpp"
@@ -10,4 +10,9 @@
 using Mat = Matrix<DefaultNumType>;
 using Vect = Vector<DefaultNumType>;
 
-#endif // PARALLELNUM_OPTIMALOPERATIONS_H
+/*              Notes:
+ *  There will be implemented library interacting elements
+ *  to improve usage quality like wrappers and aliases.
+ * */
+
+#endif // PARALLEL_NUM_OPTIMAL_OPERATIONS_H

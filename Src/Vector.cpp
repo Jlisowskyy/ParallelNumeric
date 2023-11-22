@@ -1,14 +1,10 @@
-//
-// Created by Jlisowskyy on 22/08/2023.
-//
+// Author: Jakub Lisowski
 
 #include "../Include/Types/Vector.hpp"
 
 //-----------------------------------------
 // AVX spec
 //-----------------------------------------
-
-// TODO:: RECONSIDER modifying to decrease usage of dead threads
 
 #ifdef __AVX__
 
@@ -32,8 +28,5 @@ Vector<float>& Vector<float>::reciprocal(){
     ApplyAVXOnDataEffect<__m256, &_mm256_rcp_ps, operand>();
     return *this;
 }
-
-template<>
-Vector<float>& Vector<float>::reciprocal();
 
 #endif // __AVX__

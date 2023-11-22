@@ -1,25 +1,25 @@
-
-# MyMathInterpreter
+# ParallelNumeric
 
 ## Table of Contents
 1. [Introduction](#introduction)
-2. [Motivation](#motivation)
-3. [Getting Started](#getting-started)
+    - [Details](#details)
+2. [Getting Started](#getting-started)
     - [Prerequisites](#prerequisites)
     - [Installation](#installation)
-4. [Roadmap](#roadmap)
-5. [License](#license)
+3. [Roadmap](#roadmap)
+4. [License](#license)
 ## Introduction
 
-MyMathInterpreter is an educational project that aims to implement a simple C-like language capable of fast numerical operations. 
-This project serves as an exploration into the world of compilers and interpreters.
+ParallelNumeric is an educational library project that implements diverse multi-threaded numerical solutions. 
 
-## Motivation
+### Details
 
-The primary objective of this project is to deepen my understanding of compilers and interpreters. 
-Programming languages have always fascinated me, and I believe 
-that knowledge in this area is not only essential when implementing such systems but also beneficial for any programmer. 
-Predicting and understanding compiler/interpreter actions is crucial for becoming a proficient programmer.
+It offers a straightforward interface for numerical operations encapsulated within two main classes: Vector and Matrix. 
+The primary aim of this project was to delve into performance-focused programming 
+and explore the tools and technologies employed to achieve optimal solutions.
+The library leverages OpenMP and Intel intrinsics,
+harnessing AVX2 and multiple CPU threads to obtain maximally cache-friendly algorithms.
+Presently, only static linking is supported.
 
 ## Getting Started
 
@@ -29,41 +29,33 @@ Predicting and understanding compiler/interpreter actions is crucial for becomin
 
 ### Installation
 
-Begin by cloning the repository to your local machine:
+Begin by cloning the repository into your project directory
 ```shell
-git clone https://github.com/Jlisowskyy/MyMathInterpreter ; cd MyMathInterpreter
+git clone https://github.com/Jlisowskyy/ParallelNumeric 
 ```
 
-Tailor the compilation process to your preferences by checking and modifying compilation flags. 
-Open the following file:
-```shell 
-vim include/globalValues.h
+To include headers in your project, use a relative path, for instance, to include all types:
+```C
+#include "ParallelNumeric/Include/Wrappers/OptimalOperations.hpp"
 ```
 
 Compile the program using your preferred C++ compiler, for instance, gcc:
 ```shell
-g++ -O3 -march=native -std=c++20 -o MyMathInterpreter main.cpp src/*
+g++ -O3 -march=native -fopenmp -std=c++20 YOUR_FLAGS -o YOUR_PROGRAM_NAME main.cpp  YOUR_SOURCES ParallelNumeric/Src/*
 ```
-
-Execute the interpreter to test its functionality (Please note: CLI is not yet implemented):
-```shell
-./MyMathInterpreter [FILENAME]
-```
-
 ## Roadmap
 
 As the project unfolds, it is currently in its early stages, progressing at a slowed pace due to ongoing university duties. 
 The envisioned future features include:
 
-- [x] Working lexer
-- [x] Simple expression evaluations
-- [ ] Hierarchical operators and expression evaluation
-- [ ] Introduce functions and classes, possibly pre-implemented classes without defining options
-- [ ] Integration with my own numerical library
-- [ ] Potential implementation of multithreading capabilities
-- [ ] Unix-like CLI for enhanced user interaction
-- [ ] Interactive interpreter within CLI environment
-- [ ]  Explore the possibility of compilation capabilities, though this is anticipated towards the project's end
+- [x] Working Matrix Multiplication
+- [x] All basic Vector operations
+- [ ] All basic Matrix, Matrix&Vector operations
+- [ ] Static linking
+- [ ] Global resource management strategy
+- [ ] Detailed documentation
+- [ ] Provide simple examples
+- [ ] More complex numerical algorithms and operations
 
 ## License
 

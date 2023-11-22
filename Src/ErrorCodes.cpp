@@ -6,6 +6,10 @@
 
 std::string AllocationError::WhatArg = "[ERROR] During allocation occurred specific problem:\n";
 
+// ----------------------------------
+// Error classes implementation
+// ----------------------------------
+
 AllocationError::AllocationError(size_t ToAlloc, AllocationError::SourceType T) :
         std::runtime_error(
                 [&]() -> std::string&{
@@ -21,6 +25,9 @@ AllocationError::AllocationError(size_t ToAlloc, AllocationError::SourceType T) 
         Type{ T }, ToAlloc { ToAlloc }
 {}
 
+// ------------------------------------
+// Error functions implementation
+// ------------------------------------
 
 void BaseAbandonIfNull(void *Ptr, size_t ToAlloc) {
     if (Ptr == nullptr) {

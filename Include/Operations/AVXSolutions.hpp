@@ -1,13 +1,15 @@
-//
-// Created by Jlisowskyy on 03/09/2023.
-//
+// Author: Jakub Lisowski
 
-#ifndef PARALLELNUM_AVXSOLUTIONS_HPP
-#define PARALLELNUM_AVXSOLUTIONS_HPP
+#ifndef PARALLEL_NUM_AVX_SOLUTIONS_H
+#define PARALLEL_NUM_AVX_SOLUTIONS_H
 
-#include <immintrin.h>
+// ------------------------------
+// AVX simplifying functions
+// ------------------------------
 
 #ifdef __AVX__
+
+#include <immintrin.h>
 
 inline double GetSubEl(__m256d& Obj, size_t Ind){
     return ((double*)&Obj)[Ind];
@@ -29,6 +31,7 @@ inline float HorSum(__m256& Obj){
 inline __m256d OmitCacheLoad(const double* Obj){
     return reinterpret_cast<__m256d>(_mm256_stream_load_si256(reinterpret_cast<const __m256i*>(Obj)));
 }
+
 #endif
 
-#endif //PARALLELNUM_AVXSOLUTIONS_HPP
+#endif //PARALLEL_NUM_AVX_SOLUTIONS_H

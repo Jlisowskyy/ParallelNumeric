@@ -1,8 +1,7 @@
-
 // Author: Jakub Lisowski
 
-#ifndef PARALLELNUM_MATRICESTESTS_H
-#define PARALLELNUM_MATRICESTESTS_H
+#ifndef PARALLELNUM_MATRICES_TESTS_H
+#define PARALLELNUM_MATRICES_TESTS_H
 
 #include <cstdlib>
 #include <cmath>
@@ -11,26 +10,37 @@
 
 #include "../Wrappers/OptimalOperations.hpp"
 
-// TODO: replace with tuple
-// TODO: create template for all tests etc
+// ------------------------------------------
+// Basic templates and tests components
+// ------------------------------------------
 
-size_t GenerateNumber(size_t MinVal, size_t MaxVal) {
-    return  (size_t)((3 * (double)rand() / (double)RAND_MAX) * (double)(MaxVal - MinVal)) + MinVal;
+size_t GenerateNumber(size_t MinVal, size_t MaxVal)
+    // Generates random number from range [MinVal, MaxVal], used mainly in tests to generate random input sizes
+{
+    return (size_t)((3 * (double)rand() / (double)RAND_MAX) * (double)(MaxVal - MinVal)) + MinVal;
 }
 
+// Used to pass dimensions of inputs inside tests
 using D3Pack = std::tuple<size_t, size_t, size_t>;
 using D2Pack = std::tuple<size_t, size_t>;
 
-D3Pack Gen3Dims(size_t OpCount){
-    size_t dim1 = GenerateNumber(4, std::cbrt(OpCount));
-    size_t dim2 = GenerateNumber(2, std::sqrt(OpCount / dim1));
+D3Pack Gen3Dims(size_t OpCount)
+    // Generates random 3 elements vector, with given property: As used as dimensions in matrix multiplication
+    // basic matrix algorithm should have close to OpCount operation complexity (dim1 * dim2 * dim3 ~~ OpCount)
+{
+    size_t dim1 = GenerateNumber(4, (size_t)std::cbrt(OpCount));
+    size_t dim2 = GenerateNumber(2, (size_t)std::sqrt(OpCount / dim1));
     size_t dim3 = OpCount / (dim1 * dim2);
 
     return std::make_tuple(dim1, dim2, dim3);
 }
 
-D2Pack Gen2Dims(size_t OpCount){
-    size_t dim1 = GenerateNumber(2, std::sqrt(OpCount));
+D2Pack Gen2Dims(size_t OpCount)
+    // Generates random 2 elements vector, with given property:
+    // As used as dimensions in matrix and vector multiplication
+    // basic algorithm should have close to OpCount operation complexity (dim1 * dim2 ~~ OpCount)
+{
+    size_t dim1 = GenerateNumber(2, (size_t)std::sqrt(OpCount));
     size_t dim2 = GenerateNumber(2, OpCount / dim1);
 
     return std::make_tuple(dim1, dim2);
@@ -40,28 +50,45 @@ template<
         typename Arg1T,
         typename Arg2T,
         typename ResT,
-        std::tuple<Arg1T,
-        Arg2T> (*ConstrPack)(size_t),
+        std::tuple<Arg1T, Arg2T> (*ConstrPack)(size_t),
         ResT (*FuncToTest)(std::tuple<Arg1T, Arg2T>&),
         bool (*SuccessTest)(std::tuple<Arg1T, Arg2T>&, ResT&, bool) = nullptr,
         bool Verbose = false
         >
 void PerformXXXTest(size_t OpCount, unsigned RunsToGo, long Seed = 0)
+    // Template functions used to give highly customizable foundation to different performance and quality tests
+    // of desired binary or unary operation.
+    // On the end prints average operation time and if is verbose prints also
+    // amount of failed and successful attempts.
+    // Meaning of template arguments:
+    // - Arg1T - type of first argument,
+    // - Arg2T - type of second argument,
+    // - ResT - type of result,
+    // - ConstrPack - function which creates and returns tuple of constructed and properly prepared first and second
+    //                arguments used later in tests, should use argument as an indication of arguments sizes.
+    // - FuncToTest - function responsible for applying operation on arguments tuple, returns operation result
+    // - SuccessTest - function used on both arguments and result to test them.
+    // Should return a test result.
+    //                 On the last argument there will be passed Verbose bool flag, indicating whether function should
+    //                 write something on console or not.
+    // - Verbose - Flag indicating whether function should write something, during the test, on console or not.
+    // Meaning of function arguments:
+    // - OpCount - argument passed into ConstrPack function
+    // - RunsToGo - how many times operations should be applied, each other time ConstrPack is invoked again.
+    // - Seed - by default 0, this means time function is used in srand, otherwise passed Seed is used.
 {
-    unsigned SuccessfulRuns{};
+    size_t SuccessfulRuns{};
     long long ShortestRun{};
     long long LongestRun{};
     long long LastRun{};
-    Timer T1("Every Run Counter", false), T2("Only Succesful Runs Counter", false);
+    Timer T1("Every Run Counter", false), T2("Only Successful Runs Counter", false);
 
-    if (!Seed)  {
-        srand(time(nullptr));
-    }
+    srand(Seed == 0 ? time(nullptr) : Seed);
 
     T1.CalculateAverageTime(RunsToGo, Verbose);
     T2.CalculateAverageTime(RunsToGo);
 
-    for (unsigned i = RunsToGo; i; --i) {
+    for (size_t i = RunsToGo; i; --i) {
         std::tuple<Arg1T, Arg2T> Args = ConstrPack(OpCount);
 
         T2.Start();
@@ -98,8 +125,14 @@ void PerformXXXTest(size_t OpCount, unsigned RunsToGo, long Seed = 0)
         } else {
             std::cout << "[ERROR] PROBLEM OCCURRED NOT ALL RUNS WERE SUCCESSFUL\n";
         }
+
+        std::cout << "Successful runs: " << SuccessfulRuns << "\nFailed runs: " << RunsToGo - SuccessfulRuns << std::endl;
     }
 }
+
+// ---------------------------------
+// Matrix multiplication tests
+// ---------------------------------
 
 template<
         bool Verbose = false,
@@ -109,7 +142,18 @@ template<
         bool IsResultHor = false,
         typename NumType = DefaultNumType
         >
-void PerformMMTest(size_t OpCount, unsigned RunsToGo, long Seed = 0){
+void PerformMMTest(size_t OpCount, unsigned RunsToGo, long Seed = 0)
+    // Performs matrix multiplication tests accordingly to PerformXXXTest function.
+    // For details, refer to their description.
+    // Additional template parameters:
+    // - GetDims - function responsible for generating matrices dimensions used in operation.
+    // OpCount argument will be
+    //             passed to it.
+    // - IsArg1Hor - should first argument be stored row-wise,
+    // - IsArg2Ver - should second argument be stored row-wise,
+    // - IsResultHor - should the result be stored row-wise,
+    // - NumType - type used in Matrix class template.
+{
     using MatT = Matrix<NumType>;
     using MatP = std::tuple<MatT, MatT>;
 
@@ -139,12 +183,22 @@ void PerformMMTest(size_t OpCount, unsigned RunsToGo, long Seed = 0){
                     Verbose>(OpCount, RunsToGo, Seed);
 }
 
+// ------------------------------------
+// Vector on data operation tests
+// ------------------------------------
+
 template<
         typename NumType,
         Vector<NumType>&(Vector<NumType>::*UnaryOperand)(),
         bool Verbose = false
         >
-void PerformVectOnDataTest(size_t VectorSize, unsigned RunsToGo){
+void PerformVectOnDataTest(size_t VectorSize, unsigned RunsToGo)
+    // Performs simple performance test of passed UnaryOperand function accordingly to PerformXXXTest function.
+    // For details, refer to their description.
+    // Additional template parameters:
+    // NumType - type used inside Vector class,
+    // Vector<NumType>::*UnaryOperand - method of class vector which will be tested.
+{
     using VecT = Vector<NumType>;
     using VecP = std::tuple<VecT, bool>;
 
@@ -159,13 +213,24 @@ void PerformVectOnDataTest(size_t VectorSize, unsigned RunsToGo){
         >(VectorSize, RunsToGo);
 }
 
+// ------------------------------
+// Outer product tests
+// ------------------------------
+
 template<
         bool Verbose = false,
         bool IsHor = false,
         D2Pack(*GetDims)(size_t) = Gen2Dims,
         typename NumType = DefaultNumType
         >
-void PerformOutProdTest(size_t OpCount, unsigned RunsToGo, long Seed = 0) {
+void PerformOutProdTest(size_t OpCount, unsigned RunsToGo, long Seed = 0)
+    // Performs outer product operation tests accordingly to PerformXXXTest function.
+    // For details, refer to their description.
+    // Additional template parameters:
+    // - GetDims - function responsible for generating result matrix dimensions.
+    // - IsHor - should output matrix be horizontally stored or not.
+    // - NumType - type used in Matrix and Vector class template.
+{
     using ArgT = Vector<NumType>;
     using ArgP = std::tuple<ArgT, ArgT>;
     using RetT = Matrix<NumType>;
@@ -192,6 +257,10 @@ void PerformOutProdTest(size_t OpCount, unsigned RunsToGo, long Seed = 0) {
             },Verbose>(OpCount, RunsToGo, Seed);
 }
 
+// ------------------------------------------
+// Vector & Matrix multiplication tests
+// ------------------------------------------
+
 template<
         bool Verbose = false,
         bool IsArgMatHor = false,
@@ -199,7 +268,16 @@ template<
         D2Pack(*GetDims)(size_t) = Gen2Dims,
         typename NumType = DefaultNumType
         >
-void PerformVectMatMultTest(size_t OperationCount, unsigned RunsToGo, long Seed = 0){
+void PerformVectMatMultTest(size_t OperationCount, unsigned RunsToGo, long Seed = 0)
+    // Performs matrix & vector multiplication tests accordingly to PerformXXXTest function.
+    // For details, refer to their description.
+    // Additional template parameters:
+    // - GetDims - function responsible for generating matrices dimensions used in operation.
+    //             OpCount argument will be passed to it.
+    // - IsArgMatHor - should argument matrix be stored horizontally.
+    // - IsVectHor - determines which type of operation should be done: vect * matrix or matrix * vect.
+    // - NumType - type used in Matrix and Vector class template.
+{
     using MatT = Matrix<NumType>;
     using VecT= Vector<NumType>;
     using ArgP = std::tuple<MatT, VecT>;
@@ -248,11 +326,22 @@ void PerformVectMatMultTest(size_t OperationCount, unsigned RunsToGo, long Seed 
             (OperationCount, RunsToGo, Seed);
 }
 
+// ------------------------------
+// Inner product tests
+// ------------------------------
+
 template<
         bool Verbose = false,
         typename NumType = DefaultNumType
         >
-void PerformInnerProductTest(size_t VectorSize, unsigned RunsToGo){
+void PerformInnerProductTest(size_t VectorSize, unsigned RunsToGo)
+    // Performs inner product operation tests accordingly to PerformXXXTest function.
+    // For details, refer to their description.
+    // Additional template parameters:
+    // - NumType - type used in Matrix and Vector class template.
+    // Additional function arguments:
+    // - VectorSize - determines the complexity of performed operations.
+{
     using VecT = Vector<NumType>;
     using VecP = std::tuple<VecT, VecT>;
 
@@ -279,6 +368,10 @@ void PerformInnerProductTest(size_t VectorSize, unsigned RunsToGo){
     >(VectorSize, RunsToGo);
 }
 
+// ------------------------------
+// Matrix sum tests
+// ------------------------------
+
 template<
         bool Verbose = false,
         D2Pack(*GetDims)(size_t) = Gen2Dims,
@@ -287,7 +380,17 @@ template<
         bool IsArg2Hor = false,
         typename NumType = DefaultNumType
         >
-void PerformMatrixSumTest(size_t OpCount, unsigned RunsToGo){
+void PerformMatrixSumTest(size_t OpCount, unsigned RunsToGo)
+    // Performs matrix sum tests accordingly to PerformXXXTest function.
+    // For details, refer to their description.
+    // Additional template parameters:
+    // - GetDims - function responsible for generating matrices dimensions used in operation.
+    //             OpCount argument will be passed to it.
+    // - IsArg1Hor - should first argument be stored row-wise,
+    // - IsArg2Ver - should second argument be stored row-wise,
+    // - IsResHor - should the result be stored row-wise,
+    // - NumType - type used in Matrix class template.
+{
     using MatT = Matrix<NumType>;
     using ArgP = std::tuple<MatT, MatT>;
 
@@ -315,6 +418,10 @@ void PerformMatrixSumTest(size_t OpCount, unsigned RunsToGo){
     >(OpCount, RunsToGo);
 }
 
+// -----------------------------------
+// Crossed array operation tests
+// -----------------------------------
+
 template<
         typename NumType,
         NumType (*BinOperand)(NumType, NumType),
@@ -324,9 +431,17 @@ template<
         bool IsArg1Hor = false,
         bool IsArg2Hor = false
         >
-void PerformCroseedArrayTest(size_t OpCount, unsigned RunsToGo)
-    // Crossed Array means commonly used template to efficiently perform not looped operations between at least two arrays
-    // which are held in different way
+void performCrossedArrayTest(size_t OpCount, unsigned RunsToGo)
+    // Performs the element by element matrix-to-matrix operation tests accordingly to PerformXXXTest function.
+    // For details, refer to their description.
+    // Additional template parameters:
+    // - BinOperand - operation applied to 'crossed arrays' (Matrices with different memory layout).
+    // - GetDims - function responsible for generating matrices dimensions used in operation.
+    //             OpCount argument will be passed to it.
+    // - IsArg1Hor - should first argument be stored row-wise,
+    // - IsArg2Ver - should second argument be stored row-wise,
+    // - IsResHor - should the result be stored row-wise,
+    // - NumType - type used in Matrix class template.
 {
     using MatT = Matrix<NumType>;
     using ArgP = std::tuple<MatT, MatT>;
@@ -346,7 +461,8 @@ void PerformCroseedArrayTest(size_t OpCount, unsigned RunsToGo)
                                        MatT(std::get<0>(Dims), std::get<1>(Dims), Val2, IsArg2Hor));
             },
             [](ArgP& Args) -> MatT{
-                return std::get<0>(Args) + std::get<1>(Args); // TODO: INSERT TEMPLATE
+// -------------------- TODO: INSERT TEMPLATE -------------------------------------------------------------------------------------------------------
+                return std::get<0>(Args) + std::get<1>(Args);
             },
             [](ArgP& Args, MatT& Result, bool Verb){
                 NumType ExpectedValue { BinOperand(std::get<0>(Args)[0], std::get<1>(Args)[0]) };
@@ -355,4 +471,4 @@ void PerformCroseedArrayTest(size_t OpCount, unsigned RunsToGo)
     >(OpCount, RunsToGo);
 }
 
-#endif
+#endif // PARALLELNUM_MATRICES_TESTS_H
