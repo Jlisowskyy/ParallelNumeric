@@ -1,9 +1,7 @@
-//
-// Created by Jlisowskyy on 21/08/2023.
-//
+// Author: Jakub Lisowski
 
-#ifndef PARALLELNUM_MATRIXMULTIPLICATION_HPP
-#define PARALLELNUM_MATRIXMULTIPLICATION_HPP
+#ifndef PARALLEL_NUM_MATRIX_MULTIPLICATION_H
+#define PARALLEL_NUM_MATRIX_MULTIPLICATION_H
 
 #include <iostream>
 #include <queue>
@@ -44,31 +42,14 @@ class GPMM
         //          |  |_________|    |_________|
         // Not fully optimized for short A matrix
         //
-        //  Possible combinations of horizontalness (respectively matrices: ABC):
+        //  Possible combinations of layout orientations (respectively matrices: ABC):
         //  CCC, CRC, CRR, RCC, RCR, RRR
         //  Combinations CCR and RRC are not possible to run with AVX, so they are incredibly slowly in comparison
 {
-    // Chosen blocking parameters for specific cpu attributes
-    static constexpr size_t Dim1Part = 12240; // Size chosen for double to optimize for L3 cache
-    static constexpr size_t Dim2Part = 240; // Size chosen for double to optimize for L1 cache
-    static constexpr size_t Dim3Part = 1020; // Size chosen for double to optimize for L2 cache
-    static constexpr size_t CCKernelWidth()
-    // Same for all data types, denotes the number of 'lines' to be saved on target matrix
-    { return 6; }
-    static constexpr size_t CCKernelHeight(){ return 2 * AVXInfo::GetAVXLength<NumType>(); }
+// ------------------------------------
+// class creation and interaction
+// ------------------------------------
 
-    // Matrices parameters
-    const NumType* const MatA;
-    const NumType* const MatB;
-    NumType* const MatC;
-    size_t Dim1, Dim2, Dim3;
-    size_t MatASoL, MatBSoL, MatCSoL; // Size of single line necessary, caused by applied alignment
-
-    // Thread Coordination
-    std::atomic<bool> WorkDone = false;
-    std::queue<P3D> CordQue;
-    std::mutex QueGuard;
-    std::unique_ptr<std::latch> StartGuard;
 public:
     GPMM(
         const NumType* MatAData,
@@ -96,12 +77,17 @@ public:
         CCPerform(ThreadCount);
     }
 
+    friend void ThreadInstance<>(GPMM<NumType>* Target, void (GPMM<NumType>::*Oper)(size_t, size_t, size_t)); // TODO
 
+// ---------------------------------------
+// private actual processing methods
+// ---------------------------------------
+
+private:
     void CCPerform(unsigned ThreadCount){
         std::cerr << "[ERROR] GENERAL PERFORM NOT IMPLEMENTED YET\n";
     } // TODO
 
-private:
     inline void CCKernelXx6(size_t HorizontalCord, size_t VerticalCord, size_t Dim2Off){
         std::cerr << "[ERROR] GENERAL KERNELXx6 NOT IMPLEMENTED YET\n";
     } // TODO
@@ -117,8 +103,46 @@ private:
     inline void CCInnerPartsThreaded(size_t VerIn, size_t HorOut, size_t Dim2Outer){
         std::cerr << "[ERROR] GENERAL INNER PARTS NOT IMPLEMENTED YET\n";
     } // TODO
-public:
-    friend void ThreadInstance<>(GPMM<NumType>* Target, void (GPMM<NumType>::*Oper)(size_t, size_t, size_t)); // TODO
+
+// ------------------------------
+// private fields
+// ------------------------------
+
+private:
+    // Matrices parameters
+    const NumType* const MatA;
+    const NumType* const MatB;
+    NumType* const MatC;
+    size_t Dim1, Dim2, Dim3;
+    size_t MatASoL, MatBSoL, MatCSoL; // Size of single line necessary, caused by applied alignment
+
+    // Thread Coordination
+    std::atomic<bool> WorkDone = false;
+    std::queue<P3D> CordQue;
+    std::mutex QueGuard;
+    std::unique_ptr<std::latch> StartGuard;
+
+// ------------------------------
+// static fields
+// ------------------------------
+
+    // Chosen blocking parameters for specific CPU attributes
+
+    // TODO: create functions to determine blocking size accordingly to available cache sizes
+
+    // Size chosen for double to optimize for L3 cache
+    static constexpr size_t Dim1Part = 12240;
+    // Size chosen for double to optimize for L1 cache
+    static constexpr size_t Dim2Part = 240;
+    // Size chosen for double to optimize for L2 cache
+    static constexpr size_t Dim3Part = 1020;
+
+    static constexpr size_t CCKernelWidth()
+    // Same for all data types, denotes the number of 'lines' to be saved on target matrix
+    { return 6; }
+
+    static constexpr size_t CCKernelHeight()
+    { return 2 * AVXInfo::GetAVXLength<NumType>(); }
 };
 
 //--------------------------------------
@@ -185,4 +209,4 @@ GPMM<NumType>::GPMM(
 
 }
 
-#endif //PARALLELNUM_MATRIXMULTIPLICATION_HPP
+#endif //PARALLEL_NUM_MATRIX_MULTIPLICATION_H

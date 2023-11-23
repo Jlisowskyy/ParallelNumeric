@@ -19,7 +19,9 @@ The primary aim of this project was to delve into performance-focused programmin
 and explore the tools and technologies employed to achieve optimal solutions.
 The library leverages OpenMP and Intel intrinsics,
 harnessing AVX2 and multiple CPU threads to obtain maximally cache-friendly algorithms.
-Presently, only static linking is supported.
+Presently, only static linking is supported,
+and CPU details detection is not also implemented, so the library is well-fitted
+only for intel 13600k CPU.
 
 ## Getting Started
 
@@ -29,7 +31,7 @@ Presently, only static linking is supported.
 
 ### Installation
 
-Begin by cloning the repository into your project directory
+Begin by cloning the repository into your project directory:
 ```shell
 git clone https://github.com/Jlisowskyy/ParallelNumeric 
 ```

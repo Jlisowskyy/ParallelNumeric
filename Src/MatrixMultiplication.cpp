@@ -1,6 +1,4 @@
-//
-// Created by Jlisowskyy on 21/08/2023.
-//
+// Author: Jakub Lisowski
 
 #include "../Include/Operations/MatrixMultiplication.hpp"
 
@@ -9,25 +7,26 @@
 
 template<>
 inline void GPMM<double>::CCKernelXx6(const size_t HorizontalCord, const size_t VerticalCord, const size_t Dim2Off)
-// Actual mathematical kernel used to perform all calculations
-// Every single iteration it loads one single cache line,
+// Actual mathematical kernel used to perform all core calculations
+// Every single iteration, it loads the entire cache line, from Matrix A into the memory,
 // containing 8 doubles (8x64 = 512(cache line length) = 2 * 256(avx register length)),
 // what uses 2 avx registers called there VectorPartBuff{Lower|Upper} accordingly to position on A matrix.
 // Then multiply them by matching coefficients from matrix B and save them in register accumulators
 //                         _    _    _    _    _    _
 //    coefficients  -->   |_|  |_|  |_|  |_|  |_|  |_|
-//                     _   _    _    _    _    _    _
+//    2 avx vector     _   _    _    _    _    _    _
 //         Upper-->   |v| |r|  |r|  |r|  |r|  |r|  |r|  <--  res vectors represents accumulators
 //   Two registers    |e| |e|  |e|  |e|  |e|  |e|  |e|  <--  There is 12 of them 6x2
 //   to hold vectors  |c| |s|  |s|  |s|  |s|  |s|  |s|  <--
 //                    |_| |_|  |_|  |_|  |_|  |_|  |_|  <--
-//                     _   _    _    _    _    _    _   <--
+//                     _   _    _    _    _    _    _
 //         Lower-->   |v| |r|  |r|  |r|  |r|  |r|  |r|  <--
 //                    |e| |e|  |e|  |e|  |e|  |e|  |e|  <--
 //                    |c| |s|  |s|  |s|  |s|  |s|  |s|  <--
-//                    |_| |_|  |_|  |_|  |_|  |_|  |_|
+//                    |_| |_|  |_|  |_|  |_|  |_|  |_|  <--
 //
-// Kernels iterates through 240 vectors and coefficients storing them in accumulators and saving to memory at end
+// Kernels iterates through 240 vectors and coefficients storing them in accumulators and saving to memory at end.
+// Utilizing all possible registers (2 - vector parts, 2 - coefficients, 12 - result accumulators = 16).
 {
     auto GetOnTargetVectUpper = [&](size_t Shift) -> __m256d&{
         return *((__m256d*) (MatC + (HorizontalCord + Shift) * MatCSoL + VerticalCord));
@@ -52,11 +51,12 @@ inline void GPMM<double>::CCKernelXx6(const size_t HorizontalCord, const size_t 
         VectPartRegisterUpper = _mm256_load_pd(UPtr);
         VectPartRegisterLower = _mm256_load_pd(LPtr);
 
+        // Prefetch next entire line into cache
 #ifndef __clang__
         __builtin_prefetch(UPtr + MatASoL);
         __builtin_prefetch(LPtr + MatASoL);
 #else
-        // TODO: make research about those instructions
+        // TODO: example usage not working proeprly yet
         _mm_prefetch(UPtr + MatASoL, 1);
         _mm_prefetch(LPtr + MatASoL, 0);
 #endif
@@ -114,6 +114,10 @@ inline void GPMM<double>::CCKernelXxY(size_t HorizontalCord, size_t VerticalCord
 #ifndef __clang__
         __builtin_prefetch(VectPartUpperPtr + MatASoL);
         __builtin_prefetch(VectPartLowerPtr + MatASoL);
+#else
+        // TODO: example usage not working proeprly yet
+        _mm_prefetch(VectPartUpperPtr + MatASoL, 1);
+        _mm_prefetch(VectPartLowerPtr + MatASoL, 0);
 #endif
 
         for (size_t i = 0; i < HorKernelSize; ++i ){
@@ -151,7 +155,7 @@ inline void GPMM<double>::CCInnerParts(const size_t VerOut, const size_t HorOut,
 
 template<>
 inline void GPMM<double>::CCInnerPartsThreaded(size_t VerIn, size_t HorOut, size_t Dim2Outer)
-// Function used to divide work between working threads
+    // Function used to divide work between working threads
 {
     const size_t HorInMaxRange = std::min(HorOut + Dim3Part, Dim3);
     const size_t HorInFullyBlockedRange = (HorInMaxRange / CCKernelWidth() ) * CCKernelWidth();
@@ -191,8 +195,7 @@ template<>
 void GPMM<double>::CCPerform(unsigned ThreadCount)
     // Vertical and horizontal position refers to actually filling block on C matrix
 {
-//    if (ThreadCount == 1)
-    if (true)
+    if (ThreadCount == 1)
     {
         for (size_t VerOut = 0; VerOut < Dim1; VerOut += Dim1Part){
             for(size_t Dim2Outer = 0; Dim2Outer < Dim2; Dim2Outer += Dim2Part){

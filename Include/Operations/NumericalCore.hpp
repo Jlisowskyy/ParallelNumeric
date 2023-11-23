@@ -20,7 +20,7 @@
 // Vector & scalar operations
 // ------------------------------------------
 
-// Todo replace with own thread structure or else generaly reconsider
+// Todo replace with own thread structure or else generally reconsider
 template<
         typename NumType,
         NumType (*BinOp)(NumType, NumType)
@@ -76,7 +76,7 @@ class CrossedArraysBinOpMachine{
     }
 
     enum class LayoutPossibilities
-        // XXX names denotes layout types of corresponding A, B, C matrices,
+        // XXX names denote layout types of corresponding A, B, C matrices,
     {
         ColColCol,
         ColRowCol,
@@ -230,7 +230,7 @@ void TransposeMatrixRowStored(
 // Dot product code
 // ------------------------------------------
 
-// TODO: Przetestuj template z roznymi ilosciami 'rejestrow'
+// TODO: Test templates with varying registers count
 
 template<typename NumType>
 class DotProductMachine{
@@ -360,8 +360,10 @@ class VMM{
     std::mutex QueGuard;
     std::queue<P2D> CordQue;
 
-    // TODO: Make cleaning kernels interal parts of threaded execution to not make cleaning a monolithic operational block
-    // TODO: Make universal template to have only 2 kernels (templated) Dot product like and Mat func conversion like
+    // TODO:
+    //  Make cleaning kernels internal parts of threaded execution to not make cleaning a monolithic operational block
+    // TODO:
+    //  Make universal template to have only 2 kernels (templated) Dot product like and Mat func conversion like
     // should be an easy work
     static constexpr size_t RMVKernelHeight() { return 8; }
     static constexpr size_t RMVKernelWidth() { return AVXInfo::GetAVXLength<NumType>(); }
@@ -522,7 +524,7 @@ class MatrixVectElemByElemMachine{
 
 
     // -------------------------------------------------
-    // DEBUGIN / COMPARISON TOOLS
+    // DEBUGGING / COMPARISON TOOLS
     template<
             NumType (*BinaryOperand)(NumType, NumType),
             size_t (*MatAccess)(size_t , size_t , size_t)
@@ -1419,7 +1421,7 @@ void VMM<NumType>::ProcessVMThreaded() {
 
 template<typename NumType, NumType (*BinOperand)(NumType, NumType)>
 void CrossedArraysBinOpMachine<NumType, BinOperand>::Perform()
-    // Adapts to layout situation to ensure best performance
+    // Adapts to a layout situation to ensure the best performance
 {
     const static auto ColIterColLayout = [](size_t ColCord, size_t RowCord, size_t SoL) -> size_t {
         return ColCord * SoL + RowCord;
@@ -1480,7 +1482,7 @@ void CrossedArraysBinOpMachine<NumType, BinOperand>::ExecuteOperation()
 // otherwise computation will go row by row.
 //
 // !!!WARNING!!! FirstIterCols changes access function argument order !!!
-// First argument to access function is always first iterator, next is second iterator and last one is SoL
+// The First argument to access function is always the first iterator, the next is the second iterator, and the last one is SoL
 {
 //        const size_t HorizontalRange{ ( Cols / GetCacheLineElem<NumType>()) * GetCacheLineElem<NumType>() };
 //        const size_t VerticalRange{ ( Rows / GetCacheLine<NumType>() ) * GetCacheLineElem<NumType>() };
@@ -1515,7 +1517,7 @@ void CrossedArraysBinOpMachine<NumType, BinOperand>::BlockLxLKernel(size_t HorCo
 // otherwise computation will go row by row.
 //
 // !!!WARNING!!! FirstIterCols changes access function argument order !!!
-// First argument to access function is always first iterator, next is second iterator and last one is SoL
+// The First argument to access function is always the first iterator, the next is the second iterator, and the last one is SoL
 {
     const auto [ FirstIterCord, FirstIterRange, SecondIterCord, SecondIterRange ] = [&](){
         const size_t VerRange { GetVerRange(VerCord) };
