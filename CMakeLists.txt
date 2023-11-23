@@ -4,18 +4,6 @@ project(ParallelNumeric)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
-set(gcc_flag "$<COMPILE_LANG_AND_ID:CXX,GNU,LCC>")
-set(clang_flag "$<COMPILE_LANG_AND_ID:CXX,ARMClang,AppleClang,Clang>")
-
-#set(-DCMAKE_TOOLCHAIN_FILE C:/dev/vcpkg/scripts/buildsystems/vcpkg.cmake)
-#find_package(superlu CONFIG REQUIRED)
-#target_link_libraries(main PRIVATE superlu::superlu)
-#find_package(arpackng CONFIG REQUIRED)
-#target_link_libraries(main PRIVATE ARPACK::ARPACK)
-#find_package(Armadillo CONFIG REQUIRED)
-#target_link_libraries(main PRIVATE armadillo)
-
-
 add_executable(ParallelNumeric
         main.cpp
         Include/Maintenance/Debuggers.hpp

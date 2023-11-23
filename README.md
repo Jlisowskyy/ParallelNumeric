@@ -52,6 +52,7 @@ The envisioned future features include:
 
 - [x] Working Matrix Multiplication
 - [x] All basic Vector operations
+- [ ] Perform tests against state-of-the-art solutions
 - [ ] All basic Matrix, Matrix&Vector operations
 - [ ] Static linking
 - [ ] Global resource management strategy

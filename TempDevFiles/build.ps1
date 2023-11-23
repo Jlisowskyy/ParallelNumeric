@@ -1,0 +1,1 @@
+g++ -std=c++20 -mfma -mavx -mavx2 -O3 -fopenmp ../main.cpp ../Src/Debuggers.cpp ../Src/ResourceManager.cpp ../Src/ErrorCodes.cpp ../Src/Matrix.cpp ../Src/MatrixMultiplicationSolutions.cpp ../Src/NumericalCore.cpp ../Src/ParallelNumeric.cpp ../Src/MatrixMultiplication.cpp ../Src/Vector.cpp
